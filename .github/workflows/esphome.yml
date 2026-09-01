@@ -1,0 +1,44 @@
+name: ESPHome
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate-and-compile:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install ESPHome 2026.8.2
+        run: python -m pip install "esphome==2026.8.2"
+
+      - name: Create CI-only ESPHome secrets
+        shell: bash
+        run: |
+          cat > esphome/secrets.yaml <<'EOF'
+          wifi_ssid: "CI Network"
+          wifi_password: "ci-password-not-used"
+          fallback_ap_password: "ci-fallback-password"
+          basement_remote_api_encryption_key: "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
+          basement_remote_ota_password: "ci-ota-password-not-used"
+          EOF
+
+      - name: Validate configuration
+        run: esphome config esphome/basement-remote-sticky.yaml
+
+      - name: Compile firmware
+        run: esphome compile esphome/basement-remote-sticky.yaml
