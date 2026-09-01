@@ -1,0 +1,12 @@
+# Never commit ESPHome credentials.
+secrets.yaml
+**/secrets.yaml
+
+# ESPHome / PlatformIO build output.
+.esphome/
+.pioenvs/
+.piolibdeps/
+
+# Editor / OS noise.
+.DS_Store
+.vscode/
