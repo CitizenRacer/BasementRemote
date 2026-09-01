@@ -36,8 +36,23 @@ jobs:
           basement_remote_ota_password: "ci-ota-password-not-used"
           EOF
 
+      - name: Create CI package wrapper
+        shell: bash
+        run: |
+          cat > esphome/ci-wrapper.yaml <<'EOF'
+          substitutions:
+            wifi_ssid: !secret wifi_ssid
+            wifi_password: !secret wifi_password
+            fallback_ap_password: !secret fallback_ap_password
+            basement_remote_api_encryption_key: !secret basement_remote_api_encryption_key
+            basement_remote_ota_password: !secret basement_remote_ota_password
+
+          packages:
+            basement_remote: !include basement-remote-sticky.yaml
+          EOF
+
       - name: Validate configuration
-        run: esphome config esphome/basement-remote-sticky.yaml
+        run: esphome config esphome/ci-wrapper.yaml
 
       - name: Compile firmware
-        run: esphome compile esphome/basement-remote-sticky.yaml
+        run: esphome compile esphome/ci-wrapper.yaml
