@@ -78,7 +78,9 @@ README.md
 
 ## Phase 1: hardware bring-up
 
-Current firmware status: **implemented, compile validation pending**.
+Current firmware status: **compile-validated and ready for the first hardware test**.
+
+The canonical Phase 1 configuration passed both `esphome config` and a full `esphome compile` using **ESPHome 2026.8.2** in GitHub Actions. The first test should verify real hardware behavior before any Phase 2 Home Assistant control actions are enabled.
 
 Phase 1 intentionally keeps the device awake. It verifies components independently before remote-control behavior or deep sleep is introduced:
 
@@ -94,6 +96,20 @@ Phase 1 intentionally keeps the device awake. It verifies components independent
 The e-paper uses `update_interval: never`; it renders once at boot and only refreshes on explicit request. Touch and button activity therefore does **not** cause an e-paper refresh.
 
 Battery reporting is deferred from the first bring-up image. Sticky uses a BQ27220 fuel gauge on the system I²C bus, but ESPHome does not currently provide a first-party BQ27220 sensor component. Adding an external component is not justified until the core hardware is proven.
+
+### First hardware-test checklist
+
+After flashing Phase 1, verify these in order:
+
+1. The Sticky stays powered continuously rather than shutting itself off.
+2. The e-paper shows the `BASEMENT REMOTE / PHASE 1` portrait test screen.
+3. The device joins Wi-Fi and appears online in ESPHome / Home Assistant.
+4. Touching all four regions produces sensible portrait `Last Touch X` / `Last Touch Y` coordinates.
+5. GPIO4, GPIO5, and GPIO6 each change their corresponding binary sensor and produce the expected log message.
+6. The diagnostic `Refresh E-Paper` button performs an explicit display refresh.
+7. OTA remains reachable after the initial USB flash.
+
+Do **not** evaluate deep sleep in this phase; it is intentionally absent.
 
 ## Building
 
