@@ -89,9 +89,9 @@ Create a local Device Builder YAML containing:
 substitutions:
   wifi_ssid: !secret wifi_ssid
   wifi_password: !secret wifi_password
+  ota_password: !secret ota_password
   fallback_ap_password: !secret fallback_ap_password
   basement_remote_api_encryption_key: !secret basement_remote_api_encryption_key
-  basement_remote_ota_password: !secret basement_remote_ota_password
 
 packages:
   basement_remote:
@@ -105,6 +105,8 @@ packages:
 The same content is checked in as [`esphome/device-builder-wrapper.example.yaml`](esphome/device-builder-wrapper.example.yaml).
 
 ESPHome's remote-package mechanism does not allow the Git-hosted package itself to resolve `!secret` values. The local wrapper therefore reads Device Builder's `secrets.yaml` and supplies those values as substitutions. All non-secret firmware logic remains in GitHub.
+
+This intentionally uses the same shared `wifi_ssid`, `wifi_password`, `fallback_ap_password`, and `ota_password` secret names as the Garage Door Keypad wrapper. On a Device Builder already configured for that project, the only new secret required for Basement Remote is `basement_remote_api_encryption_key`.
 
 With `ref: main`, Device Builder pulls the production source from GitHub. `refresh: 60s` means ESPHome may refresh its cached repository copy when validation/build activity occurs after that interval; it does not automatically flash the device when GitHub changes.
 
@@ -149,12 +151,12 @@ This project targets **ESPHome 2026.8.2 or newer**.
 
 For normal Device Builder use:
 
-1. Copy the keys from `esphome/secrets.example.yaml` into Device Builder's local `secrets.yaml` and replace every placeholder.
+1. Ensure Device Builder's local `secrets.yaml` contains the shared Wi-Fi/fallback/OTA keys plus `basement_remote_api_encryption_key`; see `esphome/secrets.example.yaml` for the expected names.
 2. Create a new Device Builder configuration using the contents of `esphome/device-builder-wrapper.example.yaml`.
 3. Validate or install from that local wrapper. ESPHome fetches `esphome/basement-remote-sticky.yaml` from GitHub `main`.
 4. Future firmware changes are made and reviewed in GitHub. Device Builder remains only the secret-bearing import wrapper.
 
-For repository/CI development, `.github/workflows/esphome.yml` creates a local package wrapper with dummy CI-only secrets, validates it, compiles it, and on `main` also validates the production remote GitHub wrapper.
+For repository/CI development, `.github/workflows/esphome.yml` creates a local package wrapper with dummy CI-only secrets, validates it, validates the production remote GitHub wrapper on `main`, and compiles the firmware.
 
 ## Planned phases
 
