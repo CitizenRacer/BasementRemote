@@ -72,7 +72,7 @@ The ESP32-S3 has 32 MB flash and 8 MB octal PSRAM. ESPHome's integrated display 
 ```text
 esphome/
   basement-remote-sticky.yaml          # Canonical GitHub-hosted ESPHome package
-  device-builder-wrapper.example.yaml  # Tiny local Device Builder config
+  device-builder-wrapper.example.yaml  # Example of the tiny local Device Builder config
   secrets.example.yaml                 # Secret key names only; no credentials
 README.md
 ```
@@ -83,7 +83,17 @@ README.md
 
 This project follows the same Git-backed package pattern as the Garage Door Keypad project. Do not copy the full firmware into Device Builder.
 
-Create a local Device Builder YAML containing:
+### Create the Device Builder entry
+
+1. Open **ESPHome Device Builder** in Home Assistant.
+2. Click **Create device**.
+3. Choose **Empty Configuration**.
+4. Name the device **Basement Remote Sticky**; use `basement-remote-sticky.yaml` as the local filename when applicable.
+5. Open the YAML editor and replace the generated content with the contents of [`esphome/device-builder-wrapper.example.yaml`](esphome/device-builder-wrapper.example.yaml).
+6. Ensure the required keys exist in Device Builder's local `secrets.yaml`.
+7. Validate the configuration. The wrapper will fetch the production firmware from GitHub `main`.
+
+The checked-in wrapper is:
 
 ```yaml
 substitutions:
@@ -102,11 +112,17 @@ packages:
     refresh: 60s
 ```
 
-The same content is checked in as [`esphome/device-builder-wrapper.example.yaml`](esphome/device-builder-wrapper.example.yaml).
-
 ESPHome's remote-package mechanism does not allow the Git-hosted package itself to resolve `!secret` values. The local wrapper therefore reads Device Builder's `secrets.yaml` and supplies those values as substitutions. All non-secret firmware logic remains in GitHub.
 
-This intentionally uses the same shared `wifi_ssid`, `wifi_password`, `fallback_ap_password`, and `ota_password` secret names as the Garage Door Keypad wrapper. On a Device Builder already configured for that project, the only new secret required for Basement Remote is `basement_remote_api_encryption_key`.
+### Local secrets
+
+The wrapper intentionally uses the same shared `wifi_ssid`, `wifi_password`, `fallback_ap_password`, and `ota_password` secret names as the Garage Door Keypad wrapper. On a Device Builder already configured for that project, the only new secret required for Basement Remote is:
+
+```yaml
+basement_remote_api_encryption_key: "YOUR_32_BYTE_BASE64_API_KEY"
+```
+
+The real generated API encryption key belongs **only** in Home Assistant's local ESPHome `secrets.yaml`. Never commit the actual key to this repository. `esphome/secrets.example.yaml` documents the expected secret names without containing credentials.
 
 With `ref: main`, Device Builder pulls the production source from GitHub. `refresh: 60s` means ESPHome may refresh its cached repository copy when validation/build activity occurs after that interval; it does not automatically flash the device when GitHub changes.
 
@@ -176,7 +192,7 @@ Only after normal operation is reliable: add a session-based sleep policy. Recen
 
 - GitHub `CitizenRacer/BasementRemote` is the canonical source of truth.
 - Device Builder contains only the small package wrapper and local secrets; do not maintain a second full firmware copy there.
-- Do not commit credentials.
+- Do not commit credentials or the actual ESPHome API encryption key.
 - Do not modify the working Home Assistant Basement Remote dashboard unless a proven requirement emerges.
 - Do not introduce deep sleep until the remote is stable.
 - Do not flash the Sticky until the firmware has passed configuration validation and compilation.
