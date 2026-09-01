@@ -6,7 +6,7 @@
 substitutions:
   device_name: basement-remote-sticky
   friendly_name: Basement Remote Sticky
-  firmware_version: "0.1.1"
+  firmware_version: "0.1.2"
 
 esphome:
   name: ${device_name}
@@ -75,7 +75,7 @@ api:
 
 ota:
   - platform: esphome
-    password: "${basement_remote_ota_password}"
+    password: "${ota_password}"
 
 # E-paper and microSD share SCK/MOSI on Sticky. Phase 1 only uses the display.
 spi:
