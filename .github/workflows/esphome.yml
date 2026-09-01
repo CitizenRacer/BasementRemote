@@ -54,9 +54,9 @@ jobs:
       - name: Validate configuration
         run: esphome config esphome/ci-wrapper.yaml
 
-      - name: Compile firmware
-        run: esphome compile esphome/ci-wrapper.yaml
-
       - name: Validate production GitHub wrapper
         if: github.ref == 'refs/heads/main'
         run: esphome config esphome/device-builder-wrapper.example.yaml
+
+      - name: Compile firmware
+        run: esphome compile esphome/ci-wrapper.yaml
