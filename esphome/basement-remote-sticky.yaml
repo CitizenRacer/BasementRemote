@@ -41,6 +41,9 @@ esp32:
   flash_size: 32MB
   framework:
     type: esp-idf
+    advanced:
+      # ESPHome 2026.8 requires this for OTA on ESP32-S3 targets with 32 MB flash.
+      enable_idf_experimental_features: true
 
 psram:
   mode: octal
@@ -81,7 +84,10 @@ spi:
 i2c:
   - id: touch_i2c
     scl: GPIO2
-    sda: GPIO3
+    sda:
+      number: GPIO3
+      # GPIO3 is a strapping pin, but this is the board's documented touch SDA.
+      ignore_strapping_warning: true
     frequency: 100kHz
     scan: true
 
@@ -109,7 +115,7 @@ switch:
 binary_sensor:
   - platform: gpio
     id: button_ai_power
-    name: "AI / Power Button"
+    name: "AI Power Button"
     pin:
       number: GPIO4
       mode:
