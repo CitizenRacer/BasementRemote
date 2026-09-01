@@ -71,16 +71,48 @@ The ESP32-S3 has 32 MB flash and 8 MB octal PSRAM. ESPHome's integrated display 
 
 ```text
 esphome/
-  basement-remote-sticky.yaml   # Canonical ESPHome firmware
-  secrets.example.yaml         # Secret key names only; no credentials
+  basement-remote-sticky.yaml          # Canonical GitHub-hosted ESPHome package
+  device-builder-wrapper.example.yaml  # Tiny local Device Builder config
+  secrets.example.yaml                 # Secret key names only; no credentials
 README.md
 ```
+
+`esphome/basement-remote-sticky.yaml` is the source of truth. The Device Builder configuration should remain a small local wrapper that resolves secrets and imports that file directly from the repository's `main` branch.
+
+## ESPHome Device Builder
+
+This project follows the same Git-backed package pattern as the Garage Door Keypad project. Do not copy the full firmware into Device Builder.
+
+Create a local Device Builder YAML containing:
+
+```yaml
+substitutions:
+  wifi_ssid: !secret wifi_ssid
+  wifi_password: !secret wifi_password
+  fallback_ap_password: !secret fallback_ap_password
+  basement_remote_api_encryption_key: !secret basement_remote_api_encryption_key
+  basement_remote_ota_password: !secret basement_remote_ota_password
+
+packages:
+  basement_remote:
+    url: https://github.com/CitizenRacer/BasementRemote
+    ref: main
+    files:
+      - esphome/basement-remote-sticky.yaml
+    refresh: 60s
+```
+
+The same content is checked in as [`esphome/device-builder-wrapper.example.yaml`](esphome/device-builder-wrapper.example.yaml).
+
+ESPHome's remote-package mechanism does not allow the Git-hosted package itself to resolve `!secret` values. The local wrapper therefore reads Device Builder's `secrets.yaml` and supplies those values as substitutions. All non-secret firmware logic remains in GitHub.
+
+With `ref: main`, Device Builder pulls the production source from GitHub. `refresh: 60s` means ESPHome may refresh its cached repository copy when validation/build activity occurs after that interval; it does not automatically flash the device when GitHub changes.
 
 ## Phase 1: hardware bring-up
 
 Current firmware status: **compile-validated and ready for the first hardware test**.
 
-The canonical Phase 1 configuration passed both `esphome config` and a full `esphome compile` using **ESPHome 2026.8.2** in GitHub Actions. The first test should verify real hardware behavior before any Phase 2 Home Assistant control actions are enabled.
+The canonical Phase 1 configuration passed both `esphome config` and a full `esphome compile` using **ESPHome 2026.8.2** in GitHub Actions. CI builds the firmware as an ESPHome package and also validates the production GitHub-backed Device Builder wrapper on `main`.
 
 Phase 1 intentionally keeps the device awake. It verifies components independently before remote-control behavior or deep sleep is introduced:
 
@@ -115,20 +147,14 @@ Do **not** evaluate deep sleep in this phase; it is intentionally absent.
 
 This project targets **ESPHome 2026.8.2 or newer**.
 
-1. Copy the keys from `esphome/secrets.example.yaml` into the ESPHome Device Builder's `secrets.yaml` and replace every placeholder.
-2. Validate:
+For normal Device Builder use:
 
-   ```bash
-   esphome config esphome/basement-remote-sticky.yaml
-   ```
+1. Copy the keys from `esphome/secrets.example.yaml` into Device Builder's local `secrets.yaml` and replace every placeholder.
+2. Create a new Device Builder configuration using the contents of `esphome/device-builder-wrapper.example.yaml`.
+3. Validate or install from that local wrapper. ESPHome fetches `esphome/basement-remote-sticky.yaml` from GitHub `main`.
+4. Future firmware changes are made and reviewed in GitHub. Device Builder remains only the secret-bearing import wrapper.
 
-3. Compile:
-
-   ```bash
-   esphome compile esphome/basement-remote-sticky.yaml
-   ```
-
-4. Flash only after the Phase 1 image has been compile-validated and the project status says it is ready for the first hardware test.
+For repository/CI development, `.github/workflows/esphome.yml` creates a local package wrapper with dummy CI-only secrets, validates it, compiles it, and on `main` also validates the production remote GitHub wrapper.
 
 ## Planned phases
 
@@ -147,6 +173,7 @@ Only after normal operation is reliable: add a session-based sleep policy. Recen
 ## Safety / development policy
 
 - GitHub `CitizenRacer/BasementRemote` is the canonical source of truth.
+- Device Builder contains only the small package wrapper and local secrets; do not maintain a second full firmware copy there.
 - Do not commit credentials.
 - Do not modify the working Home Assistant Basement Remote dashboard unless a proven requirement emerges.
 - Do not introduce deep sleep until the remote is stable.
