@@ -6,7 +6,7 @@
 substitutions:
   device_name: basement-remote-sticky
   friendly_name: Basement Remote Sticky
-  firmware_version: "0.2.1"
+  firmware_version: "0.2.2"
 
 esphome:
   name: ${device_name}
@@ -382,79 +382,6 @@ script:
               {{ not state_attr('media_player.basement_sonos_arc',
                                 'is_volume_muted') }}
 
-  # App source names are verified against media_player.basement_apple_tv's
-  # current source_list. HBO Max intentionally differs from the card's newer
-  # generic "Max" default because this Apple TV reports "HBO Max".
-  - id: launch_netflix
-    mode: restart
-    then:
-      - logger.log: "Apple TV source: Netflix"
-      - homeassistant.action:
-          action: media_player.select_source
-          data:
-            entity_id: media_player.basement_apple_tv
-            source: Netflix
-
-  - id: launch_disney
-    mode: restart
-    then:
-      - logger.log: "Apple TV source: Disney+"
-      - homeassistant.action:
-          action: media_player.select_source
-          data:
-            entity_id: media_player.basement_apple_tv
-            source: "Disney+"
-
-  - id: launch_prime_video
-    mode: restart
-    then:
-      - logger.log: "Apple TV source: Prime Video"
-      - homeassistant.action:
-          action: media_player.select_source
-          data:
-            entity_id: media_player.basement_apple_tv
-            source: "Prime Video"
-
-  - id: launch_paramount
-    mode: restart
-    then:
-      - logger.log: "Apple TV source: Paramount+"
-      - homeassistant.action:
-          action: media_player.select_source
-          data:
-            entity_id: media_player.basement_apple_tv
-            source: "Paramount+"
-
-  - id: launch_hulu
-    mode: restart
-    then:
-      - logger.log: "Apple TV source: Hulu"
-      - homeassistant.action:
-          action: media_player.select_source
-          data:
-            entity_id: media_player.basement_apple_tv
-            source: Hulu
-
-  - id: launch_hbo_max
-    mode: restart
-    then:
-      - logger.log: "Apple TV source: HBO Max"
-      - homeassistant.action:
-          action: media_player.select_source
-          data:
-            entity_id: media_player.basement_apple_tv
-            source: "HBO Max"
-
-  - id: launch_apple_tv
-    mode: restart
-    then:
-      - logger.log: "Apple TV source: TV"
-      - homeassistant.action:
-          action: media_player.select_source
-          data:
-            entity_id: media_player.basement_apple_tv
-            source: TV
-
 sensor:
   - platform: wifi_signal
     name: "Wi-Fi Signal"
@@ -551,30 +478,16 @@ display:
       it.rectangle(160, 428, 160, 80, black);
       it.printf(240, 453, id(font_heading), black, TextAlign::TOP_CENTER, "DOWN");
 
-      // Volume is handled by the two physical side buttons. Keep a single
+      // Volume is handled by the two physical side buttons. Keep a large
       // touchscreen mute control because there is no physical mute button.
-      it.rectangle(167, 518, 146, 68, black);
-      it.printf(240, 541, id(font_body), black, TextAlign::TOP_CENTER, "MUTE");
+      it.filled_rectangle(120, 540, 240, 90, black);
+      it.printf(240, 570, id(font_heading), white, TextAlign::TOP_CENTER, "MUTE");
 
-      it.printf(w / 2, 598, id(font_small), black, TextAlign::TOP_CENTER, "APPS");
-
-      // App row 1.
-      it.rectangle(4, 630, 113, 64, black);
-      it.printf(60, 653, id(font_small), black, TextAlign::TOP_CENTER, "NETFLIX");
-      it.rectangle(123, 630, 113, 64, black);
-      it.printf(179, 653, id(font_small), black, TextAlign::TOP_CENTER, "DISNEY+");
-      it.rectangle(242, 630, 113, 64, black);
-      it.printf(298, 653, id(font_small), black, TextAlign::TOP_CENTER, "PRIME");
-      it.rectangle(361, 630, 113, 64, black);
-      it.printf(417, 653, id(font_small), black, TextAlign::TOP_CENTER, "PARAMOUNT+");
-
-      // App row 2.
-      it.rectangle(62, 714, 113, 64, black);
-      it.printf(118, 737, id(font_small), black, TextAlign::TOP_CENTER, "HULU");
-      it.rectangle(183, 714, 113, 64, black);
-      it.printf(239, 737, id(font_small), black, TextAlign::TOP_CENTER, "HBO MAX");
-      it.rectangle(304, 714, 113, 64, black);
-      it.printf(360, 737, id(font_small), black, TextAlign::TOP_CENTER, "APPLE TV");
+      it.line(60, 674, w - 60, 674, black);
+      it.printf(w / 2, 698, id(font_body), black, TextAlign::TOP_CENTER,
+                "SIDE BUTTONS: VOLUME");
+      it.printf(w / 2, 742, id(font_small), black, TextAlign::TOP_CENTER,
+                "FIRMWARE ${firmware_version}");
 
 touchscreen:
   - platform: gt911
@@ -660,22 +573,8 @@ touchscreen:
                 id(apple_tv_pause).execute();
               } else if (x >= 362 && x < 472 && y >= 160 && y < 228) {
                 id(apple_tv_skip_forward).execute();
-              } else if (x >= 167 && x < 313 && y >= 518 && y < 586) {
+              } else if (x >= 120 && x < 360 && y >= 540 && y < 630) {
                 id(sonos_toggle_mute).execute();
-              } else if (x >= 4 && x < 117 && y >= 630 && y < 694) {
-                id(launch_netflix).execute();
-              } else if (x >= 123 && x < 236 && y >= 630 && y < 694) {
-                id(launch_disney).execute();
-              } else if (x >= 242 && x < 355 && y >= 630 && y < 694) {
-                id(launch_prime_video).execute();
-              } else if (x >= 361 && x < 474 && y >= 630 && y < 694) {
-                id(launch_paramount).execute();
-              } else if (x >= 62 && x < 175 && y >= 714 && y < 778) {
-                id(launch_hulu).execute();
-              } else if (x >= 183 && x < 296 && y >= 714 && y < 778) {
-                id(launch_hbo_max).execute();
-              } else if (x >= 304 && x < 417 && y >= 714 && y < 778) {
-                id(launch_apple_tv).execute();
               } else {
                 ESP_LOGD("touch", "Touch was outside a control");
               }
