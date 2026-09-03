@@ -6,7 +6,7 @@
 substitutions:
   device_name: basement-remote-sticky
   friendly_name: Basement Remote Sticky
-  firmware_version: "0.2.8"
+  firmware_version: "0.2.9"
 
 esphome:
   name: ${device_name}
@@ -42,11 +42,6 @@ esphome:
     - priority: -100
       then:
         - logger.log: "Basement Remote firmware ${firmware_version} ready"
-        - if:
-            condition:
-              lambda: 'return id(woke_from_tv_off_sleep);'
-            then:
-              - script.execute: wake_tv_after_power_button
   on_shutdown:
     # Preserve the battery power latch, shut down the touch/display rails, and
     # hold those levels through deep sleep.
@@ -152,26 +147,29 @@ binary_sensor:
       - delayed_off: 10ms
     on_press:
       - logger.log: "AI / Power button pressed"
+      - lambda: |-
+          // deep_sleep.on_wake starts the timer for the press that woke the
+          // device. Normal awake presses start timing here.
+          if (!id(woke_from_tv_off_sleep)) {
+            id(ai_power_pressed_ms) = millis();
+          }
+          id(tv_wake_in_progress) = true;
     on_release:
       - lambda: |-
-          // The press that wakes from deep sleep is handled by
-          // wake_tv_after_power_button. Suppress its release so one physical
-          // gesture cannot issue a second power command.
-          if (id(suppress_ai_button_release)) {
-            id(suppress_ai_button_release) = false;
-            ESP_LOGD("power", "Ignored release from deep-sleep wake press");
-            return;
+          const uint32_t held_ms = millis() - id(ai_power_pressed_ms);
+          const bool was_sleep_wake = id(woke_from_tv_off_sleep);
+          id(woke_from_tv_off_sleep) = false;
+
+          if (held_ms >= 800) {
+            ESP_LOGI("power", "AI / Power long press (%u ms): TV off", held_ms);
+            id(turn_tv_off_after_power_button).execute();
+          } else {
+            ESP_LOGI("power", "AI / Power short press (%u ms): TV on", held_ms);
+            id(wake_tv_after_power_button).execute();
           }
 
-          const bool tv_is_on =
-              id(basement_tv_state).has_state() &&
-              id(basement_tv_state).state != "off" &&
-              id(basement_tv_state).state != "unknown" &&
-              id(basement_tv_state).state != "unavailable";
-          if (tv_is_on) {
-            id(apple_tv_suspend).execute();
-          } else {
-            id(wake_tv_after_power_button).execute();
+          if (was_sleep_wake) {
+            ESP_LOGD("power", "Classified AI button press that woke deep sleep");
           }
 
   - platform: gpio
@@ -275,11 +273,13 @@ globals:
     restore_value: false
     initial_value: "false"
 
-  - id: suppress_ai_button_release
-    type: bool
+  - id: ai_power_pressed_ms
+    type: uint32_t
     restore_value: false
-    initial_value: "false"
+    initial_value: "0"
 
+  # Blocks TV-off sleep while a power command is being classified or while
+  # Home Assistant / HDMI-CEC state is converging after a power command.
   - id: tv_wake_in_progress
     type: bool
     restore_value: false
@@ -297,7 +297,7 @@ script:
     mode: restart
     then:
       - lambda: 'id(tv_wake_in_progress) = true;'
-      - logger.log: "Power button: waiting for Home Assistant"
+      - logger.log: "AI / Power short press: waiting for Home Assistant"
       - wait_until:
           condition:
             api.connected:
@@ -310,7 +310,7 @@ script:
           else:
             - logger.log:
                 level: ERROR
-                format: "Power button: Home Assistant did not connect"
+                format: "AI / Power short press: Home Assistant did not connect"
       # Give HDMI-CEC and the LG integration time to report the TV as on.
       - delay: 30s
       - lambda: 'id(tv_wake_in_progress) = false;'
@@ -321,6 +321,30 @@ script:
                      id(basement_tv_state).state == "off";
           then:
             - script.execute: enter_tv_off_sleep
+
+  - id: turn_tv_off_after_power_button
+    mode: restart
+    then:
+      - lambda: 'id(tv_wake_in_progress) = true;'
+      - logger.log: "AI / Power long press: waiting for Home Assistant"
+      - wait_until:
+          condition:
+            api.connected:
+          timeout: 20s
+      - if:
+          condition:
+            api.connected:
+          then:
+            - script.execute: apple_tv_suspend
+          else:
+            - logger.log:
+                level: ERROR
+                format: "AI / Power long press: Home Assistant did not connect"
+      # Allow Apple TV suspend -> HDMI-CEC -> LG state to settle, then use the
+      # confirmed LG state as the authority for whether deep sleep is safe.
+      - delay: 15s
+      - lambda: 'id(tv_wake_in_progress) = false;'
+      - script.execute: enter_tv_off_sleep
 
   - id: enter_tv_off_sleep
     mode: restart
@@ -543,7 +567,13 @@ text_sensor:
             then:
               - script.execute: enter_tv_off_sleep
             else:
-              - lambda: 'id(tv_wake_in_progress) = false;'
+              - if:
+                  condition:
+                    lambda: |-
+                      return id(basement_tv_state).state != "unknown" &&
+                             id(basement_tv_state).state != "unavailable";
+                  then:
+                    - lambda: 'id(tv_wake_in_progress) = false;'
 
 image:
   # Heroicons v2.2.0 solid SVGs, pinned and rasterized to 1-bit assets at
@@ -554,8 +584,6 @@ image:
       transparency: chroma_key
       resize: 60x60
     files:
-      - id: icon_power
-        file: https://raw.githubusercontent.com/tailwindlabs/heroicons/v2.2.0/optimized/24/solid/power.svg
       - id: icon_back
         file: https://raw.githubusercontent.com/tailwindlabs/heroicons/v2.2.0/optimized/24/solid/arrow-uturn-left.svg
       - id: icon_home
@@ -577,7 +605,7 @@ image:
       - id: icon_right
         file: https://raw.githubusercontent.com/tailwindlabs/heroicons/v2.2.0/optimized/24/solid/chevron-right.svg
       - id: icon_select
-        file: https://raw.githubusercontent.com/tailwindlabs/heroicons/v2.2.0/optimized/24/solid/check.svg
+        file: https://raw.githubusercontent.com/tailwindlabs/heroicons/v2.2.0/optimized/24/solid/cursor-arrow-ripple.svg
       - id: icon_mute
         file: https://raw.githubusercontent.com/tailwindlabs/heroicons/v2.2.0/optimized/24/solid/speaker-x-mark.svg
 display:
@@ -616,52 +644,47 @@ display:
       it.fill(white);
       it.rectangle(0, 0, w, h, black);
 
-      // Full-height, icon-only remote face. The control hierarchy follows
-      // modern Apple TV / Google TV conventions: isolated power, dominant
-      // D-pad, back/home directly below, transport controls, then mute.
-
-      // Isolate the less-frequently used power control to prevent mis-taps.
-      rounded_rect(360, 20, 100, 80, 14);
-      it.image(410, 60, id(icon_power), ImageAlign::CENTER, black, white);
+      // Full-height, icon-only remote face. Physical AI is the sole power
+      // control, leaving the entire touchscreen for navigation and media.
 
       // Primary navigation: largest and highest controls on the face.
-      rounded_rect(150, 110, 180, 90, 14);
-      it.image(240, 155, id(icon_up), ImageAlign::CENTER, black, white);
-      rounded_rect(30, 215, 120, 110, 14);
-      it.image(90, 270, id(icon_left), ImageAlign::CENTER, black, white);
-      fill_rounded_rect(170, 215, 140, 110, 14, black);
-      it.image(240, 270, id(icon_select), ImageAlign::CENTER, white, black);
-      rounded_rect(330, 215, 120, 110, 14);
-      it.image(390, 270, id(icon_right), ImageAlign::CENTER, black, white);
-      rounded_rect(150, 340, 180, 90, 14);
-      it.image(240, 385, id(icon_down), ImageAlign::CENTER, black, white);
+      rounded_rect(150, 30, 180, 90, 14);
+      it.image(240, 75, id(icon_up), ImageAlign::CENTER, black, white);
+      rounded_rect(30, 135, 120, 110, 14);
+      it.image(90, 190, id(icon_left), ImageAlign::CENTER, black, white);
+      fill_rounded_rect(170, 135, 140, 110, 14, black);
+      it.image(240, 190, id(icon_select), ImageAlign::CENTER, white, black);
+      rounded_rect(330, 135, 120, 110, 14);
+      it.image(390, 190, id(icon_right), ImageAlign::CENTER, black, white);
+      rounded_rect(150, 260, 180, 90, 14);
+      it.image(240, 305, id(icon_down), ImageAlign::CENTER, black, white);
 
       // Secondary navigation directly below the D-pad.
-      rounded_rect(60, 455, 160, 90, 14);
-      it.image(140, 500, id(icon_back), ImageAlign::CENTER, black, white);
-      rounded_rect(260, 455, 160, 90, 14);
-      it.image(340, 500, id(icon_home), ImageAlign::CENTER, black, white);
+      rounded_rect(60, 390, 160, 90, 14);
+      it.image(140, 435, id(icon_back), ImageAlign::CENTER, black, white);
+      rounded_rect(260, 390, 160, 90, 14);
+      it.image(340, 435, id(icon_home), ImageAlign::CENTER, black, white);
 
       // Playback transport.
-      rounded_rect(8, 565, 110, 90, 14);
-      it.image(63, 610, id(icon_skip_backward), ImageAlign::CENTER, black, white);
-      rounded_rect(126, 565, 110, 90, 14);
-      it.image(181, 610, id(icon_play), ImageAlign::CENTER, black, white);
-      rounded_rect(244, 565, 110, 90, 14);
-      it.image(299, 610, id(icon_pause), ImageAlign::CENTER, black, white);
-      rounded_rect(362, 565, 110, 90, 14);
-      it.image(417, 610, id(icon_skip_forward), ImageAlign::CENTER, black, white);
+      rounded_rect(8, 515, 110, 90, 14);
+      it.image(63, 560, id(icon_skip_backward), ImageAlign::CENTER, black, white);
+      rounded_rect(126, 515, 110, 90, 14);
+      it.image(181, 560, id(icon_play), ImageAlign::CENTER, black, white);
+      rounded_rect(244, 515, 110, 90, 14);
+      it.image(299, 560, id(icon_pause), ImageAlign::CENTER, black, white);
+      rounded_rect(362, 515, 110, 90, 14);
+      it.image(417, 560, id(icon_skip_forward), ImageAlign::CENTER, black, white);
 
       // Volume is handled by the two physical side buttons. Mute is white
       // while sound is active and inverts to black when the Sonos Arc is muted.
       const bool muted = id(sonos_muted).has_state() && id(sonos_muted).state;
       id(displayed_mute_state) = muted ? 1 : 0;
       if (muted) {
-        fill_rounded_rect(160, 685, 160, 100, 14, black);
-        it.image(240, 735, id(icon_mute), ImageAlign::CENTER, white, black);
+        fill_rounded_rect(160, 665, 160, 100, 14, black);
+        it.image(240, 715, id(icon_mute), ImageAlign::CENTER, white, black);
       } else {
-        rounded_rect(160, 685, 160, 100, 14);
-        it.image(240, 735, id(icon_mute), ImageAlign::CENTER, black, white);
+        rounded_rect(160, 665, 160, 100, 14);
+        it.image(240, 715, id(icon_mute), ImageAlign::CENTER, black, white);
       }
 
 touchscreen:
@@ -701,19 +724,19 @@ touchscreen:
 
             // Repeatable controls fire immediately, then the interval below
             // repeats them after a deliberate hold.
-            if (x >= 150 && x < 330 && y >= 110 && y < 200) {
+            if (x >= 150 && x < 330 && y >= 30 && y < 120) {
               id(touch_repeat_command) = 1;
               id(apple_tv_up).execute();
-            } else if (x >= 150 && x < 330 && y >= 340 && y < 430) {
+            } else if (x >= 150 && x < 330 && y >= 260 && y < 350) {
               id(touch_repeat_command) = 2;
               id(apple_tv_down).execute();
-            } else if (x >= 30 && x < 150 && y >= 215 && y < 325) {
+            } else if (x >= 30 && x < 150 && y >= 135 && y < 245) {
               id(touch_repeat_command) = 3;
               id(apple_tv_left).execute();
-            } else if (x >= 330 && x < 450 && y >= 215 && y < 325) {
+            } else if (x >= 330 && x < 450 && y >= 135 && y < 245) {
               id(touch_repeat_command) = 4;
               id(apple_tv_right).execute();
-            } else if (x >= 170 && x < 310 && y >= 215 && y < 325) {
+            } else if (x >= 170 && x < 310 && y >= 135 && y < 245) {
               id(touch_repeat_command) = 5;
               id(apple_tv_select).execute();
             }
@@ -726,29 +749,22 @@ touchscreen:
 
             const int x = id(touch_start_x);
             const int y = id(touch_start_y);
-            const uint32_t held_ms = millis() - id(touch_started_ms);
 
             // Repeatable controls already fired on touch.
             if (id(touch_repeat_command) == 0) {
-              if (x >= 360 && x < 460 && y >= 20 && y < 100) {
-                if (held_ms >= 800) {
-                  id(apple_tv_suspend).execute();
-                } else {
-                  id(wake_tv_after_power_button).execute();
-                }
-              } else if (x >= 60 && x < 220 && y >= 455 && y < 545) {
+              if (x >= 60 && x < 220 && y >= 390 && y < 480) {
                 id(apple_tv_menu).execute();
-              } else if (x >= 260 && x < 420 && y >= 455 && y < 545) {
+              } else if (x >= 260 && x < 420 && y >= 390 && y < 480) {
                 id(apple_tv_home).execute();
-              } else if (x >= 8 && x < 118 && y >= 565 && y < 655) {
+              } else if (x >= 8 && x < 118 && y >= 515 && y < 605) {
                 id(apple_tv_skip_backward).execute();
-              } else if (x >= 126 && x < 236 && y >= 565 && y < 655) {
+              } else if (x >= 126 && x < 236 && y >= 515 && y < 605) {
                 id(apple_tv_play).execute();
-              } else if (x >= 244 && x < 354 && y >= 565 && y < 655) {
+              } else if (x >= 244 && x < 354 && y >= 515 && y < 605) {
                 id(apple_tv_pause).execute();
-              } else if (x >= 362 && x < 472 && y >= 565 && y < 655) {
+              } else if (x >= 362 && x < 472 && y >= 515 && y < 605) {
                 id(apple_tv_skip_forward).execute();
-              } else if (x >= 160 && x < 320 && y >= 685 && y < 785) {
+              } else if (x >= 160 && x < 320 && y >= 665 && y < 765) {
                 id(sonos_toggle_mute).execute();
               } else {
                 ESP_LOGD("touch", "Touch was outside a control");
@@ -758,9 +774,10 @@ touchscreen:
             id(touch_active) = false;
             id(touch_repeat_command) = 0;
 
-# Sleep indefinitely whenever the physical LG TV is off. GPIO4 is the
-# active-low AI / Power button and the only wake source; its wake automation
-# turns the Apple TV on after the encrypted Home Assistant API reconnects.
+# Sleep indefinitely whenever the physical LG TV is confirmed off. GPIO4 is
+# the active-low AI / Power button and the only wake source. The button press
+# that wakes the ESP32 is timed through release so short/long semantics remain
+# identical whether the remote began awake or asleep.
 deep_sleep:
   id: tv_power_sleep
   wakeup_pin:
@@ -774,7 +791,7 @@ deep_sleep:
   on_wake:
     - lambda: |-
         id(woke_from_tv_off_sleep) = true;
-        id(suppress_ai_button_release) = true;
+        id(ai_power_pressed_ms) = millis();
         id(tv_wake_in_progress) = true;
 
 interval:
