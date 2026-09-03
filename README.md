@@ -186,7 +186,7 @@ Firmware v0.2.6 presents a simplified 480×800 portrait remote face and calls Ho
 
 Implemented controls:
 
-- A completely text-free screen using Material Design Icons
+- A completely text-free screen using pinned Heroicons SVG assets
 - Isolated Power control in the upper-right
 - A dominant D-pad at the top, followed by Back/Home, playback, and mute
 - Power: tap sends `wakeup`; hold for at least 800 ms sends `suspend`
@@ -202,7 +202,7 @@ Implemented controls:
 
 The control hierarchy follows the common pattern documented for current Apple TV and Google TV remotes: the D-pad is the primary upper control, Back/Home are directly beneath navigation, transport controls follow, and mute sits near the physical volume controls. Power is isolated to reduce accidental activation.
 
-The e-paper face remains static during normal use; control presses do not trigger slow display refreshes. Button glyphs come from [Material Design Icons](https://pictogrammers.com/library/mdi/) v7.4.47. The firmware pins that exact webfont release and includes only the required glyphs.
+The e-paper face remains static during normal use; control presses do not trigger slow display refreshes. Button artwork comes from [Heroicons](https://heroicons.com/) v2.2.0. The firmware pins the official release, downloads only the required solid SVGs at compile time, and rasterizes them into 1-bit assets for the e-paper display.
 
 ### Phase 2 test checklist
 
