@@ -6,7 +6,7 @@
 substitutions:
   device_name: basement-remote-sticky
   friendly_name: Basement Remote Sticky
-  firmware_version: "0.2.7"
+  firmware_version: "0.2.8"
 
 esphome:
   name: ${device_name}
@@ -25,23 +25,39 @@ esphome:
             gpio_hold_dis(GPIO_NUM_42);
             gpio_hold_dis(GPIO_NUM_45);
             gpio_hold_dis(GPIO_NUM_46);
+            gpio_hold_dis(GPIO_NUM_47);
     - priority: 600
       then:
         - output.turn_on: pwr_hold
         - output.turn_on: pwr_lock
         - switch.turn_on: touch_power_enable
-        - delay: 1s
-        - component.update: epaper_display
+        # The e-paper image survives deep sleep. Avoid a redundant full refresh
+        # when the AI / Power button wakes an already-rendered remote face.
+        - if:
+            condition:
+              lambda: 'return !id(woke_from_tv_off_sleep);'
+            then:
+              - delay: 1s
+              - component.update: epaper_display
     - priority: -100
       then:
         - logger.log: "Basement Remote firmware ${firmware_version} ready"
+        - if:
+            condition:
+              lambda: 'return id(woke_from_tv_off_sleep);'
+            then:
+              - script.execute: wake_tv_after_power_button
   on_shutdown:
-    # Preserve the power-latch state across controlled resets. Deep sleep is
-    # intentionally NOT enabled in Phase 1.
+    # Preserve the battery power latch, shut down the touch/display rails, and
+    # hold those levels through deep sleep.
     then:
+      - switch.turn_off: touch_power_enable
       - lambda: |-
+          gpio_set_level(GPIO_NUM_47, 0);
+          gpio_hold_en(GPIO_NUM_42);
           gpio_hold_en(GPIO_NUM_45);
           gpio_hold_en(GPIO_NUM_46);
+          gpio_hold_en(GPIO_NUM_47);
           gpio_deep_sleep_hold_en();
 
 esp32:
@@ -136,6 +152,27 @@ binary_sensor:
       - delayed_off: 10ms
     on_press:
       - logger.log: "AI / Power button pressed"
+    on_release:
+      - lambda: |-
+          // The press that wakes from deep sleep is handled by
+          // wake_tv_after_power_button. Suppress its release so one physical
+          // gesture cannot issue a second power command.
+          if (id(suppress_ai_button_release)) {
+            id(suppress_ai_button_release) = false;
+            ESP_LOGD("power", "Ignored release from deep-sleep wake press");
+            return;
+          }
+
+          const bool tv_is_on =
+              id(basement_tv_state).has_state() &&
+              id(basement_tv_state).state != "off" &&
+              id(basement_tv_state).state != "unknown" &&
+              id(basement_tv_state).state != "unavailable";
+          if (tv_is_on) {
+            id(apple_tv_suspend).execute();
+          } else {
+            id(wake_tv_after_power_button).execute();
+          }
 
   - platform: gpio
     id: button_up
@@ -192,7 +229,13 @@ binary_sensor:
     attribute: is_volume_muted
     on_state:
       then:
-        - component.update: epaper_display
+        - if:
+            condition:
+              lambda: |-
+                const int new_state = x ? 1 : 0;
+                return new_state != id(displayed_mute_state);
+            then:
+              - component.update: epaper_display
 
 
 globals:
@@ -227,7 +270,74 @@ globals:
     restore_value: false
     initial_value: "0"
 
+  - id: woke_from_tv_off_sleep
+    type: bool
+    restore_value: false
+    initial_value: "false"
+
+  - id: suppress_ai_button_release
+    type: bool
+    restore_value: false
+    initial_value: "false"
+
+  - id: tv_wake_in_progress
+    type: bool
+    restore_value: false
+    initial_value: "false"
+
+  # Retain the last rendered mute face so a deep-sleep wake does not cause an
+  # unnecessary full e-paper refresh when the Sonos state is unchanged.
+  - id: displayed_mute_state
+    type: int
+    restore_value: true
+    initial_value: "-1"
+
 script:
+  - id: wake_tv_after_power_button
+    mode: restart
+    then:
+      - lambda: 'id(tv_wake_in_progress) = true;'
+      - logger.log: "Power button: waiting for Home Assistant"
+      - wait_until:
+          condition:
+            api.connected:
+          timeout: 20s
+      - if:
+          condition:
+            api.connected:
+          then:
+            - script.execute: apple_tv_wakeup
+          else:
+            - logger.log:
+                level: ERROR
+                format: "Power button: Home Assistant did not connect"
+      # Give HDMI-CEC and the LG integration time to report the TV as on.
+      - delay: 30s
+      - lambda: 'id(tv_wake_in_progress) = false;'
+      - if:
+          condition:
+            lambda: |-
+              return id(basement_tv_state).has_state() &&
+                     id(basement_tv_state).state == "off";
+          then:
+            - script.execute: enter_tv_off_sleep
+
+  - id: enter_tv_off_sleep
+    mode: restart
+    then:
+      # Debounce transient media-player states and allow any e-paper refresh
+      # already in flight to finish before its power rail is disabled.
+      - delay: 10s
+      - if:
+          condition:
+            lambda: |-
+              return id(basement_tv_state).has_state() &&
+                     id(basement_tv_state).state == "off" &&
+                     !id(tv_wake_in_progress);
+          then:
+            - logger.log: "Basement TV is off; entering deep sleep"
+            - deep_sleep.enter: tv_power_sleep
+
   # Remote commands match the Apple TV defaults used by the working
   # custom:universal-remote-card dashboard.
   - id: apple_tv_wakeup
@@ -420,6 +530,21 @@ text_sensor:
     ip_address:
       name: "IP Address"
 
+  # The LG TV is the authority for the remote's awake/asleep lifecycle.
+  - platform: homeassistant
+    id: basement_tv_state
+    internal: true
+    entity_id: media_player.basement_tv
+    on_value:
+      then:
+        - if:
+            condition:
+              lambda: 'return id(basement_tv_state).state == "off";'
+            then:
+              - script.execute: enter_tv_off_sleep
+            else:
+              - lambda: 'id(tv_wake_in_progress) = false;'
+
 image:
   # Heroicons v2.2.0 solid SVGs, pinned and rasterized to 1-bit assets at
   # compile time for crisp rendering on the e-paper display.
@@ -530,6 +655,7 @@ display:
       // Volume is handled by the two physical side buttons. Mute is white
       // while sound is active and inverts to black when the Sonos Arc is muted.
       const bool muted = id(sonos_muted).has_state() && id(sonos_muted).state;
+      id(displayed_mute_state) = muted ? 1 : 0;
       if (muted) {
         fill_rounded_rect(160, 685, 160, 100, 14, black);
         it.image(240, 735, id(icon_mute), ImageAlign::CENTER, white, black);
@@ -608,7 +734,7 @@ touchscreen:
                 if (held_ms >= 800) {
                   id(apple_tv_suspend).execute();
                 } else {
-                  id(apple_tv_wakeup).execute();
+                  id(wake_tv_after_power_button).execute();
                 }
               } else if (x >= 60 && x < 220 && y >= 455 && y < 545) {
                 id(apple_tv_menu).execute();
@@ -631,6 +757,25 @@ touchscreen:
 
             id(touch_active) = false;
             id(touch_repeat_command) = 0;
+
+# Sleep indefinitely whenever the physical LG TV is off. GPIO4 is the
+# active-low AI / Power button and the only wake source; its wake automation
+# turns the Apple TV on after the encrypted Home Assistant API reconnects.
+deep_sleep:
+  id: tv_power_sleep
+  wakeup_pin:
+    number: GPIO4
+    allow_other_uses: true
+    inverted: true
+    mode:
+      input: true
+      pullup: true
+  wakeup_pin_mode: KEEP_AWAKE
+  on_wake:
+    - lambda: |-
+        id(woke_from_tv_off_sleep) = true;
+        id(suppress_ai_button_release) = true;
+        id(tv_wake_in_progress) = true;
 
 interval:
   - interval: 50ms
