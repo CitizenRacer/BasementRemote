@@ -458,6 +458,25 @@ display:
       const int w = it.get_width();
       const int h = it.get_height();
 
+      // Small local primitives keep the static remote face dependency-free.
+      // Outlined controls use a two-pixel rounded border; filled controls use
+      // the same corner radius so the visual language stays consistent.
+      auto fill_rounded_rect = [&](int x, int y, int width, int height,
+                                   int radius, Color color) {
+        const int r = std::min(radius, std::min(width, height) / 2);
+        it.filled_rectangle(x + r, y, width - 2 * r, height, color);
+        it.filled_rectangle(x, y + r, width, height - 2 * r, color);
+        it.filled_circle(x + r, y + r, r, color);
+        it.filled_circle(x + width - r - 1, y + r, r, color);
+        it.filled_circle(x + r, y + height - r - 1, r, color);
+        it.filled_circle(x + width - r - 1, y + height - r - 1, r, color);
+      };
+      auto rounded_rect = [&](int x, int y, int width, int height, int radius) {
+        fill_rounded_rect(x, y, width, height, radius, black);
+        fill_rounded_rect(x + 2, y + 2, width - 4, height - 4,
+                          std::max(0, radius - 2), white);
+      };
+
       it.fill(white);
       it.rectangle(0, 0, w, h, black);
 
@@ -466,39 +485,39 @@ display:
       // D-pad, back/home directly below, transport controls, then mute.
 
       // Isolate the less-frequently used power control to prevent mis-taps.
-      it.rectangle(360, 20, 100, 80, black);
+      rounded_rect(360, 20, 100, 80, 14);
       it.image(410, 60, id(icon_power), ImageAlign::CENTER, black, white);
 
       // Primary navigation: largest and highest controls on the face.
-      it.rectangle(150, 110, 180, 90, black);
+      rounded_rect(150, 110, 180, 90, 14);
       it.image(240, 155, id(icon_up), ImageAlign::CENTER, black, white);
-      it.rectangle(30, 215, 120, 110, black);
+      rounded_rect(30, 215, 120, 110, 14);
       it.image(90, 270, id(icon_left), ImageAlign::CENTER, black, white);
-      it.filled_rectangle(170, 215, 140, 110, black);
+      fill_rounded_rect(170, 215, 140, 110, 14, black);
       it.image(240, 270, id(icon_select), ImageAlign::CENTER, white, black);
-      it.rectangle(330, 215, 120, 110, black);
+      rounded_rect(330, 215, 120, 110, 14);
       it.image(390, 270, id(icon_right), ImageAlign::CENTER, black, white);
-      it.rectangle(150, 340, 180, 90, black);
+      rounded_rect(150, 340, 180, 90, 14);
       it.image(240, 385, id(icon_down), ImageAlign::CENTER, black, white);
 
       // Secondary navigation directly below the D-pad.
-      it.rectangle(60, 455, 160, 90, black);
+      rounded_rect(60, 455, 160, 90, 14);
       it.image(140, 500, id(icon_back), ImageAlign::CENTER, black, white);
-      it.rectangle(260, 455, 160, 90, black);
+      rounded_rect(260, 455, 160, 90, 14);
       it.image(340, 500, id(icon_home), ImageAlign::CENTER, black, white);
 
       // Playback transport.
-      it.rectangle(8, 565, 110, 90, black);
+      rounded_rect(8, 565, 110, 90, 14);
       it.image(63, 610, id(icon_skip_backward), ImageAlign::CENTER, black, white);
-      it.rectangle(126, 565, 110, 90, black);
+      rounded_rect(126, 565, 110, 90, 14);
       it.image(181, 610, id(icon_play), ImageAlign::CENTER, black, white);
-      it.rectangle(244, 565, 110, 90, black);
+      rounded_rect(244, 565, 110, 90, 14);
       it.image(299, 610, id(icon_pause), ImageAlign::CENTER, black, white);
-      it.rectangle(362, 565, 110, 90, black);
+      rounded_rect(362, 565, 110, 90, 14);
       it.image(417, 610, id(icon_skip_forward), ImageAlign::CENTER, black, white);
 
       // Volume is handled by the two physical side buttons.
-      it.filled_rectangle(160, 685, 160, 100, black);
+      fill_rounded_rect(160, 685, 160, 100, 14, black);
       it.image(240, 735, id(icon_mute), ImageAlign::CENTER, white, black);
 
 touchscreen:
