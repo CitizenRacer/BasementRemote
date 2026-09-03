@@ -6,7 +6,7 @@
 substitutions:
   device_name: basement-remote-sticky
   friendly_name: Basement Remote Sticky
-  firmware_version: "0.2.12"
+  firmware_version: "0.2.13"
 
 esphome:
   name: ${device_name}
@@ -611,6 +611,9 @@ image:
       - id: icon_select
         file: https://raw.githubusercontent.com/tailwindlabs/heroicons/v2.2.0/optimized/24/solid/cursor-arrow-ripple.svg
   # Streaming-service logos are rendered monochrome for the 1-bit e-paper.
+  # Repo-owned launcher artwork is fetched by pinned commit because ESPHome
+  # resolves relative image paths against the Device Builder wrapper, not the
+  # cached Git package directory.
   - platform: file
     defaults:
       type: BINARY
@@ -623,10 +626,10 @@ image:
         file: https://upload.wikimedia.org/wikipedia/commons/b/b3/HBO_Max_%282025%29.svg
         resize: 72x52
       - id: logo_disney_plus
-        file: ../assets/disney-d.png
+        file: https://raw.githubusercontent.com/CitizenRacer/BasementRemote/24dca1bc7c561f91ecffb76bb930284a7dd8c159/assets/disney-d.png
         resize: 60x60
       - id: logo_paramount_plus
-        file: ../assets/paramount-plus.svg
+        file: https://raw.githubusercontent.com/CitizenRacer/BasementRemote/24dca1bc7c561f91ecffb76bb930284a7dd8c159/assets/paramount-plus.svg
         resize: 86x56
 
 display:
