@@ -6,7 +6,7 @@
 substitutions:
   device_name: basement-remote-sticky
   friendly_name: Basement Remote Sticky
-  firmware_version: "0.2.5"
+  firmware_version: "0.2.6"
 
 esphome:
   name: ${device_name}
@@ -498,10 +498,10 @@ touchscreen:
     i2c_id: touch_i2c
     interrupt_pin: GPIO21
     reset_pin: GPIO41
-    # The panel's native coordinate system is landscape. Match the display's
-    # 90-degree clockwise software rotation to produce portrait coordinates.
+    # Physical calibration on the portrait UI shows that the GT911 native X
+    # axis already matches portrait X. Native Y runs in the opposite direction,
+    # so mirror Y only. Do not swap axes: doing so rotates every hit region.
     transform:
-      swap_xy: true
       mirror_y: true
     on_touch:
       then:
