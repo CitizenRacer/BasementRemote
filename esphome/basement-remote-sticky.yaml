@@ -409,31 +409,67 @@ text_sensor:
     ip_address:
       name: "IP Address"
 
-font:
-  # Material Design Icons v7.4.47, pinned so glyph codepoints cannot drift.
-  # This is the only display font: the remote face intentionally has no text.
-  - file:
-      type: web
-      url: https://raw.githubusercontent.com/Templarian/MaterialDesign-Webfont/v7.4.47/fonts/materialdesignicons-webfont.ttf
-    id: font_mdi
-    size: 60
-    bpp: 1
-    glyphsets: []
-    glyphs:
-      - "\U000F0425" # mdi-power
-      - "\U000F004D" # mdi-arrow-left (Apple TV menu/back)
-      - "\U000F02DC" # mdi-home
-      - "\U000F04AB" # mdi-skip-backward
-      - "\U000F040A" # mdi-play
-      - "\U000F03E4" # mdi-pause
-      - "\U000F04AC" # mdi-skip-forward
-      - "\U000F0143" # mdi-chevron-up
-      - "\U000F0140" # mdi-chevron-down
-      - "\U000F0141" # mdi-chevron-left
-      - "\U000F0142" # mdi-chevron-right
-      - "\U000F0766" # mdi-circle-outline
-      - "\U000F075F" # mdi-volume-mute
-
+image:
+  # Heroicons v2.2.0 solid SVGs, pinned and rasterized to 1-bit assets at
+  # compile time for crisp rendering on the e-paper display.
+  - platform: file
+    defaults:
+      type: BINARY
+      transparency: chroma_key
+      resize: 60x60
+    files:
+      - id: icon_power
+        file:
+          source: web
+          url: https://raw.githubusercontent.com/tailwindlabs/heroicons/v2.2.0/optimized/24/solid/power.svg
+      - id: icon_back
+        file:
+          source: web
+          url: https://raw.githubusercontent.com/tailwindlabs/heroicons/v2.2.0/optimized/24/solid/arrow-uturn-left.svg
+      - id: icon_home
+        file:
+          source: web
+          url: https://raw.githubusercontent.com/tailwindlabs/heroicons/v2.2.0/optimized/24/solid/home.svg
+      - id: icon_skip_backward
+        file:
+          source: web
+          url: https://raw.githubusercontent.com/tailwindlabs/heroicons/v2.2.0/optimized/24/solid/backward.svg
+      - id: icon_play
+        file:
+          source: web
+          url: https://raw.githubusercontent.com/tailwindlabs/heroicons/v2.2.0/optimized/24/solid/play.svg
+      - id: icon_pause
+        file:
+          source: web
+          url: https://raw.githubusercontent.com/tailwindlabs/heroicons/v2.2.0/optimized/24/solid/pause.svg
+      - id: icon_skip_forward
+        file:
+          source: web
+          url: https://raw.githubusercontent.com/tailwindlabs/heroicons/v2.2.0/optimized/24/solid/forward.svg
+      - id: icon_up
+        file:
+          source: web
+          url: https://raw.githubusercontent.com/tailwindlabs/heroicons/v2.2.0/optimized/24/solid/chevron-up.svg
+      - id: icon_down
+        file:
+          source: web
+          url: https://raw.githubusercontent.com/tailwindlabs/heroicons/v2.2.0/optimized/24/solid/chevron-down.svg
+      - id: icon_left
+        file:
+          source: web
+          url: https://raw.githubusercontent.com/tailwindlabs/heroicons/v2.2.0/optimized/24/solid/chevron-left.svg
+      - id: icon_right
+        file:
+          source: web
+          url: https://raw.githubusercontent.com/tailwindlabs/heroicons/v2.2.0/optimized/24/solid/chevron-right.svg
+      - id: icon_select
+        file:
+          source: web
+          url: https://raw.githubusercontent.com/tailwindlabs/heroicons/v2.2.0/optimized/24/solid/check.svg
+      - id: icon_mute
+        file:
+          source: web
+          url: https://raw.githubusercontent.com/tailwindlabs/heroicons/v2.2.0/optimized/24/solid/speaker-x-mark.svg
 display:
   - platform: epaper_spi
     id: epaper_display
@@ -457,39 +493,39 @@ display:
 
       // Isolate the less-frequently used power control to prevent mis-taps.
       it.rectangle(360, 20, 100, 80, black);
-      it.printf(410, 60, id(font_mdi), black, TextAlign::CENTER, "\U000F0425");
+      it.image(410, 60, id(icon_power), ImageAlign::CENTER, black, white);
 
       // Primary navigation: largest and highest controls on the face.
       it.rectangle(150, 110, 180, 90, black);
-      it.printf(240, 155, id(font_mdi), black, TextAlign::CENTER, "\U000F0143");
+      it.image(240, 155, id(icon_up), ImageAlign::CENTER, black, white);
       it.rectangle(30, 215, 120, 110, black);
-      it.printf(90, 270, id(font_mdi), black, TextAlign::CENTER, "\U000F0141");
+      it.image(90, 270, id(icon_left), ImageAlign::CENTER, black, white);
       it.filled_rectangle(170, 215, 140, 110, black);
-      it.printf(240, 270, id(font_mdi), white, TextAlign::CENTER, "\U000F0766");
+      it.image(240, 270, id(icon_select), ImageAlign::CENTER, white, black);
       it.rectangle(330, 215, 120, 110, black);
-      it.printf(390, 270, id(font_mdi), black, TextAlign::CENTER, "\U000F0142");
+      it.image(390, 270, id(icon_right), ImageAlign::CENTER, black, white);
       it.rectangle(150, 340, 180, 90, black);
-      it.printf(240, 385, id(font_mdi), black, TextAlign::CENTER, "\U000F0140");
+      it.image(240, 385, id(icon_down), ImageAlign::CENTER, black, white);
 
       // Secondary navigation directly below the D-pad.
       it.rectangle(60, 455, 160, 90, black);
-      it.printf(140, 500, id(font_mdi), black, TextAlign::CENTER, "\U000F004D");
+      it.image(140, 500, id(icon_back), ImageAlign::CENTER, black, white);
       it.rectangle(260, 455, 160, 90, black);
-      it.printf(340, 500, id(font_mdi), black, TextAlign::CENTER, "\U000F02DC");
+      it.image(340, 500, id(icon_home), ImageAlign::CENTER, black, white);
 
       // Playback transport.
       it.rectangle(8, 565, 110, 90, black);
-      it.printf(63, 610, id(font_mdi), black, TextAlign::CENTER, "\U000F04AB");
+      it.image(63, 610, id(icon_skip_backward), ImageAlign::CENTER, black, white);
       it.rectangle(126, 565, 110, 90, black);
-      it.printf(181, 610, id(font_mdi), black, TextAlign::CENTER, "\U000F040A");
+      it.image(181, 610, id(icon_play), ImageAlign::CENTER, black, white);
       it.rectangle(244, 565, 110, 90, black);
-      it.printf(299, 610, id(font_mdi), black, TextAlign::CENTER, "\U000F03E4");
+      it.image(299, 610, id(icon_pause), ImageAlign::CENTER, black, white);
       it.rectangle(362, 565, 110, 90, black);
-      it.printf(417, 610, id(font_mdi), black, TextAlign::CENTER, "\U000F04AC");
+      it.image(417, 610, id(icon_skip_forward), ImageAlign::CENTER, black, white);
 
       // Volume is handled by the two physical side buttons.
       it.filled_rectangle(160, 685, 160, 100, black);
-      it.printf(240, 735, id(font_mdi), white, TextAlign::CENTER, "\U000F075F");
+      it.image(240, 735, id(icon_mute), ImageAlign::CENTER, white, black);
 
 touchscreen:
   - platform: gt911
