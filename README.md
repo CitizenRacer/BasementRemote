@@ -2,7 +2,7 @@
 
 Touchscreen TV remote firmware for the **Seeed Studio reTerminal Sticky**, backed directly by Home Assistant over ESPHome's encrypted native API.
 
-Current firmware on `main`: **v0.2.13**. The authoritative version is the `firmware_version` substitution in [`esphome/basement-remote-sticky.yaml`](esphome/basement-remote-sticky.yaml).
+Current firmware on `main`: **v0.2.14**. The authoritative version is the `firmware_version` substitution in [`esphome/basement-remote-sticky.yaml`](esphome/basement-remote-sticky.yaml).
 
 ## Architecture
 
@@ -62,6 +62,8 @@ The remote uses the Sticky's 480×800 portrait e-paper display with a static, ic
 3. Playback controls
 4. Hulu, HBO Max, Disney+, and Paramount+ launchers
 
+The up/down D-pad controls are 180×90. Left/right use the same dimensions rotated 90 degrees, so they are 90×180.
+
 Control icons use pinned **Heroicons v2.2.0** solid SVGs. The Disney+ and Paramount+ launcher artwork is stored in this repository under [`assets/`](assets/) and compiled to monochrome assets suitable for the 1-bit display. Hulu and HBO Max currently use external SVG sources at compile time.
 
 The GT911 touch transform was calibrated on the physical device. Native X already matches portrait X; Y is mirrored. The axes must not be swapped.
@@ -71,7 +73,23 @@ The e-paper display uses `update_interval: never`:
 - It refreshes once during a normal boot.
 - A wake from TV-off deep sleep reuses the image already retained by the e-paper panel and skips the redundant full refresh.
 - Touches, navigation, playback, volume changes, and app launches do not refresh the display.
+- Crossing the low-battery threshold causes a refresh so the warning icon can appear or disappear.
 - Home Assistant exposes a diagnostic **Refresh E-Paper** button for an explicit refresh.
+
+When the BQ27220 fuel gauge reports **20% or less**, a small low-battery glyph is shown in the upper-right corner. The percentage itself is not continuously rendered on the e-paper display.
+
+## Battery telemetry
+
+Firmware v0.2.14 reads the Sticky's **TI BQ27220** fuel gauge over the board's sensor I²C bus at address `0x55` and exposes the following Home Assistant entities:
+
+- **Battery Level** — state of charge in percent
+- **Battery Voltage** — pack voltage in volts
+- **Battery Current** — signed battery current in mA
+- **Battery Charging** — charging-state binary sensor derived from measured battery current
+
+Battery telemetry is sampled every 60 seconds while the ESP32 is awake. It is unavailable while the device is in deep sleep because the ESP32 and sensor polling are stopped.
+
+The low-battery display state is retained across deep sleep and the panel is refreshed only when the `<= 20%` threshold changes, avoiding routine e-paper updates for every percentage change.
 
 ## Power and deep sleep
 
@@ -85,6 +103,7 @@ While asleep:
 - The touch/display power rails are shut down and their GPIO states are held.
 - The e-paper image remains visible without power.
 - The Sticky will normally appear offline in ESPHome and Home Assistant. This is expected.
+- Battery telemetry stops updating until the device wakes.
 - The touchscreen and side volume buttons do **not** wake the device.
 - GPIO4, the physical AI / Power button, is the only wake source.
 
@@ -94,14 +113,14 @@ For a short power press, the firmware waits up to 20 seconds for the Home Assist
 
 If the TV is turned off by some other remote or automation while the Sticky is awake, the Home Assistant TV-state update also causes the Sticky to enter deep sleep.
 
-The firmware does not currently expose battery percentage in Home Assistant.
-
 ## Sticky hardware mapping
 
 | Function | GPIO |
 | --- | ---: |
-| PWR_HOLD | 45 |
-| PWR_LOCK | 46 |
+| Sensor I²C SCL / BQ27220 | 0 |
+| Sensor I²C SDA / BQ27220 | 1 |
+| Touch SCL | 2 |
+| Touch SDA | 3 |
 | AI / Power button | 4 |
 | Volume Up button | 5 |
 | Volume Down button | 6 |
@@ -111,14 +130,14 @@ The firmware does not currently expose battery percentage in Home Assistant.
 | E-paper DC | 16 |
 | E-paper RST | 17 |
 | E-paper BUSY | 18 |
-| E-paper EN | 47 |
-| Touch SCL | 2 |
-| Touch SDA | 3 |
 | Touch INT | 21 |
 | Touch RST | 41 |
 | Touch EN | 42 |
+| PWR_HOLD | 45 |
+| PWR_LOCK | 46 |
+| E-paper EN | 47 |
 
-Seeed's current Sticky hardware mapping uses **SCL = GPIO2** and **SDA = GPIO3** for the GT911 touch bus. The project intentionally follows that assignment even though early project notes had those two labels reversed.
+The Sticky uses two independent I²C buses in this firmware: the BQ27220 sensor bus on GPIO0/GPIO1 and the GT911 touchscreen bus on GPIO2/GPIO3.
 
 The ESP32-S3 configuration uses 32 MB flash and 8 MB octal PSRAM. ESPHome's integrated `Seeed-reTerminal-Sticky` display model supplies the SSD1677 display-specific defaults. The e-paper and microSD interfaces share SCK/MOSI; this firmware uses those shared pins only for the display and does not configure the microSD card.
 
@@ -138,6 +157,8 @@ README.md
 ```
 
 [`esphome/basement-remote-sticky.yaml`](esphome/basement-remote-sticky.yaml) is the firmware source of truth. The ESPHome Device Builder configuration should remain a small local wrapper that resolves secrets and imports the production package from GitHub `main`.
+
+The two files under `assets/` are required by the production firmware. The example wrapper and example secrets file are intentionally retained because they document the supported Device Builder deployment pattern without storing credentials.
 
 ## ESPHome Device Builder setup
 
@@ -187,6 +208,8 @@ The real API encryption key and passwords belong only in Home Assistant's local 
 
 With `ref: main`, Device Builder uses the production source from GitHub. `refresh: 60s` controls how often ESPHome may refresh its cached repository copy during validation/build activity; it does **not** automatically flash a device when `main` changes.
 
+Repository-owned Disney+ and Paramount+ artwork is referenced from the firmware using commit-pinned raw GitHub URLs because ESPHome resolves relative image paths against the Device Builder wrapper rather than the cached Git package directory.
+
 ## Building and CI
 
 The firmware requires **ESPHome 2026.8.2 or newer**. CI currently installs and tests against **ESPHome 2026.8.2**.
@@ -205,15 +228,17 @@ For normal use, build and install through the Device Builder wrapper. For reposi
 After installing the current firmware:
 
 1. Confirm Home Assistant allows the ESPHome device to perform Home Assistant actions.
-2. Confirm the boot log contains `Basement Remote firmware 0.2.13 ready`.
-3. Test all D-pad directions and Select, including hold-to-repeat.
-4. Test Back, Home, and all four playback controls.
-5. Test Hulu, HBO Max, Disney+, and Paramount+ launchers.
-6. Test both physical volume buttons with tap and hold.
-7. Short-press the AI / Power button and confirm the Apple TV / TV wakes.
-8. Long-press the AI / Power button and confirm the Apple TV suspends and the TV turns off.
-9. Confirm the Sticky enters deep sleep after the LG TV is reported off and appears offline in Home Assistant.
-10. Press the physical AI / Power button and confirm the Sticky wakes and the short/long press is classified correctly.
+2. Confirm the boot log contains `Basement Remote firmware 0.2.14 ready`.
+3. Confirm **Battery Level**, **Battery Voltage**, **Battery Current**, and **Battery Charging** appear in Home Assistant and report plausible values while the Sticky is awake.
+4. Test all D-pad directions and Select, including hold-to-repeat.
+5. Test Back, Home, and all four playback controls.
+6. Test Hulu, HBO Max, Disney+, and Paramount+ launchers.
+7. Test both physical volume buttons with tap and hold.
+8. Short-press the AI / Power button and confirm the Apple TV / TV wakes.
+9. Long-press the AI / Power button and confirm the Apple TV suspends and the TV turns off.
+10. Confirm the Sticky enters deep sleep after the LG TV is reported off and appears offline in Home Assistant.
+11. Press the physical AI / Power button and confirm the Sticky wakes and the short/long press is classified correctly.
+12. If the battery is at or below 20%, confirm the low-battery glyph appears after the fuel-gauge reading updates.
 
 ## Maintenance rules
 
@@ -222,4 +247,5 @@ After installing the current firmware:
 - Do not commit credentials or the actual ESPHome API encryption key.
 - Keep the existing Home Assistant Basement Remote behavior as the reference for command semantics.
 - App launcher source names must continue to match the source names exposed by `media_player.basement_apple_tv`.
-- Do not add routine e-paper refreshes for button presses or state changes unless the visible UI actually requires them.
+- Keep repository-owned launcher artwork local to this repository and use deterministic references that work from the Device Builder package context.
+- Do not add routine e-paper refreshes for button presses or continuously changing telemetry unless the visible UI actually requires them.
