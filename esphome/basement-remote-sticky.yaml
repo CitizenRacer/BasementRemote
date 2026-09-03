@@ -6,7 +6,7 @@
 substitutions:
   device_name: basement-remote-sticky
   friendly_name: Basement Remote Sticky
-  firmware_version: "0.2.6"
+  firmware_version: "0.2.7"
 
 esphome:
   name: ${device_name}
@@ -182,6 +182,17 @@ binary_sensor:
           then:
             - script.execute: apple_tv_volume_down
             - delay: 175ms
+
+  # Import the Sonos Arc mute attribute so the physical e-paper face reflects
+  # the actual audio state even when mute changes somewhere else.
+  - platform: homeassistant
+    id: sonos_muted
+    internal: true
+    entity_id: media_player.basement_sonos_arc
+    attribute: is_volume_muted
+    on_state:
+      then:
+        - component.update: epaper_display
 
 
 globals:
@@ -516,9 +527,16 @@ display:
       rounded_rect(362, 565, 110, 90, 14);
       it.image(417, 610, id(icon_skip_forward), ImageAlign::CENTER, black, white);
 
-      // Volume is handled by the two physical side buttons.
-      fill_rounded_rect(160, 685, 160, 100, 14, black);
-      it.image(240, 735, id(icon_mute), ImageAlign::CENTER, white, black);
+      // Volume is handled by the two physical side buttons. Mute is white
+      // while sound is active and inverts to black when the Sonos Arc is muted.
+      const bool muted = id(sonos_muted).has_state() && id(sonos_muted).state;
+      if (muted) {
+        fill_rounded_rect(160, 685, 160, 100, 14, black);
+        it.image(240, 735, id(icon_mute), ImageAlign::CENTER, white, black);
+      } else {
+        rounded_rect(160, 685, 160, 100, 14);
+        it.image(240, 735, id(icon_mute), ImageAlign::CENTER, black, white);
+      }
 
 touchscreen:
   - platform: gt911
