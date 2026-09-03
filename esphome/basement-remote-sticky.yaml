@@ -32,6 +32,9 @@ esphome:
         - switch.turn_on: touch_power_enable
         - delay: 1s
         - component.update: epaper_display
+    - priority: -100
+      then:
+        - logger.log: "Basement Remote firmware ${firmware_version} ready"
   on_shutdown:
     # Preserve the power-latch state across controlled resets. Deep sleep is
     # intentionally NOT enabled in Phase 1.
