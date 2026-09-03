@@ -792,8 +792,22 @@ deep_sleep:
   on_wake:
     - lambda: |-
         id(woke_from_tv_off_sleep) = true;
-        id(ai_power_pressed_ms) = millis();
+        // millis() starts again at boot, and the GPIO wake happens at the start
+        // of that boot. Zero therefore gives us the best available estimate of
+        // how long a still-held wake press has lasted.
+        id(ai_power_pressed_ms) = 0;
         id(tv_wake_in_progress) = true;
+    - if:
+        # A normal quick tap may be released before the GPIO binary sensor is
+        # initialized. If GPIO4 is already high here, classify it as the short
+        # ON gesture immediately rather than waiting for an on_release that will
+        # never arrive.
+        condition:
+          lambda: 'return gpio_get_level(GPIO_NUM_4) != 0;'
+        then:
+          - logger.log: "AI / Power quick wake tap: TV on"
+          - lambda: 'id(woke_from_tv_off_sleep) = false;'
+          - script.execute: wake_tv_after_power_button
 
 interval:
   - interval: 50ms
