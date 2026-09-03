@@ -2,7 +2,7 @@
 
 Touchscreen TV remote firmware for the **Seeed Studio reTerminal Sticky**, backed directly by Home Assistant over ESPHome's encrypted native API.
 
-Current firmware: **v0.2.6** — icon-only, ergonomically ordered remote.
+Current firmware: **v0.2.7** — icon-only, ergonomically ordered remote.
 
 ## Architecture
 
@@ -182,7 +182,7 @@ For repository/CI development, `.github/workflows/esphome.yml` creates a local p
 
 ### Phase 2 — complete remote UI (current)
 
-Firmware v0.2.6 presents a simplified 480×800 portrait remote face and calls Home Assistant directly over the encrypted native API. Its touch transform was calibrated on the physical device: native X maps to portrait X and native Y is mirrored, with no axis swap.
+Firmware v0.2.7 presents a simplified 480×800 portrait remote face and calls Home Assistant directly over the encrypted native API. Its touch transform was calibrated on the physical device: native X maps to portrait X and native Y is mirrored, with no axis swap.
 
 Implemented controls:
 
@@ -194,7 +194,7 @@ Implemented controls:
 - Skip backward, Play, Pause, and Skip forward
 - Up, Down, Left, Right, and Select
 - Hold-to-repeat for the touchscreen D-pad
-- Large touchscreen Sonos Arc mute toggle
+- Large touchscreen Sonos Arc mute toggle whose face is white when unmuted and black when muted
 - Physical GPIO5/GPIO6 side buttons as volume up/down, including hold-to-repeat
 - No on-screen volume up/down controls
 - No app launchers on the Sticky screen
@@ -202,12 +202,12 @@ Implemented controls:
 
 The control hierarchy follows the common pattern documented for current Apple TV and Google TV remotes: the D-pad is the primary upper control, Back/Home are directly beneath navigation, transport controls follow, and mute sits near the physical volume controls. Power is isolated to reduce accidental activation.
 
-The e-paper face remains static during normal use; control presses do not trigger slow display refreshes. Button artwork comes from [Heroicons](https://heroicons.com/) v2.2.0. The firmware pins the official release, downloads only the required solid SVGs at compile time, and rasterizes them into 1-bit assets for the e-paper display.
+Navigation, playback, and volume presses do not trigger slow display refreshes. A change to the Sonos Arc `is_volume_muted` attribute triggers one refresh so the Mute button remains accurate even when mute changes elsewhere. Button artwork comes from [Heroicons](https://heroicons.com/) v2.2.0. The firmware pins the official release, downloads only the required solid SVGs at compile time, and rasterizes them into 1-bit assets for the e-paper display.
 
 ### Phase 2 test checklist
 
 1. In Home Assistant, enable **Allow the device to perform Home Assistant actions** for the Basement Remote Sticky ESPHome integration.
-2. Install v0.2.6 from the GitHub-backed Device Builder wrapper.
+2. Install v0.2.7 from the GitHub-backed Device Builder wrapper.
 3. Confirm the boot log contains `Basement Remote firmware 0.2.6 ready`.
 4. Test Power tap and hold, Menu, Home, all four playback buttons, D-pad/Select, and mute.
 5. Hold each D-pad direction to confirm repeat behavior.
