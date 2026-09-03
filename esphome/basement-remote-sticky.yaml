@@ -6,7 +6,7 @@
 substitutions:
   device_name: basement-remote-sticky
   friendly_name: Basement Remote Sticky
-  firmware_version: "0.2.11"
+  firmware_version: "0.2.12"
 
 esphome:
   name: ${device_name}
@@ -623,11 +623,12 @@ image:
         file: https://upload.wikimedia.org/wikipedia/commons/b/b3/HBO_Max_%282025%29.svg
         resize: 72x52
       - id: logo_disney_plus
-        file: https://raw.githubusercontent.com/CitizenRacer/BasementRemote/main/assets/disney-d.svg
-        resize: 66x52
+        file: ../assets/disney-d.png
+        resize: 60x60
       - id: logo_paramount_plus
-        file: https://raw.githubusercontent.com/CitizenRacer/BasementRemote/main/assets/paramount-plus-mark.svg
+        file: ../assets/paramount-plus.svg
         resize: 86x56
+
 display:
   - platform: epaper_spi
     id: epaper_display
