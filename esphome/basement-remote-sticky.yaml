@@ -6,7 +6,7 @@
 substitutions:
   device_name: basement-remote-sticky
   friendly_name: Basement Remote Sticky
-  firmware_version: "0.1.2"
+  firmware_version: "0.2.0"
 
 esphome:
   name: ${device_name}
@@ -164,6 +164,61 @@ binary_sensor:
     on_press:
       - logger.log: "Down button pressed"
 
+
+script:
+  # These are the same five remote.send_command actions used by the working
+  # Home Assistant Basement Remote dashboard. Keeping each action explicit
+  # makes the device behavior easy to audit and extend.
+  - id: apple_tv_up
+    mode: restart
+    then:
+      - logger.log: "Apple TV command: up"
+      - homeassistant.action:
+          action: remote.send_command
+          data:
+            entity_id: remote.basement_apple_tv
+            command: up
+
+  - id: apple_tv_down
+    mode: restart
+    then:
+      - logger.log: "Apple TV command: down"
+      - homeassistant.action:
+          action: remote.send_command
+          data:
+            entity_id: remote.basement_apple_tv
+            command: down
+
+  - id: apple_tv_left
+    mode: restart
+    then:
+      - logger.log: "Apple TV command: left"
+      - homeassistant.action:
+          action: remote.send_command
+          data:
+            entity_id: remote.basement_apple_tv
+            command: left
+
+  - id: apple_tv_right
+    mode: restart
+    then:
+      - logger.log: "Apple TV command: right"
+      - homeassistant.action:
+          action: remote.send_command
+          data:
+            entity_id: remote.basement_apple_tv
+            command: right
+
+  - id: apple_tv_select
+    mode: restart
+    then:
+      - logger.log: "Apple TV command: select"
+      - homeassistant.action:
+          action: remote.send_command
+          data:
+            entity_id: remote.basement_apple_tv
+            command: select
+
 sensor:
   - platform: wifi_signal
     name: "Wi-Fi Signal"
@@ -219,31 +274,38 @@ display:
       it.fill(white);
       it.rectangle(0, 0, w, h, black);
 
-      // An asymmetric header makes portrait orientation immediately obvious.
-      it.filled_rectangle(0, 0, w, 84, black);
+      // Mostly-static e-paper face. Coordinates below are also the touch
+      // targets used in sticky_touch.on_touch.
+      it.filled_rectangle(0, 0, w, 82, black);
       it.printf(w / 2, 22, id(font_heading), white, TextAlign::TOP_CENTER,
-                "BASEMENT REMOTE");
+                "APPLE TV");
 
-      it.printf(w / 2, 122, id(font_heading), black, TextAlign::TOP_CENTER,
-                "PHASE 1");
-      it.printf(w / 2, 174, id(font_body), black, TextAlign::TOP_CENTER,
-                "DISPLAY + TOUCH + BUTTON TEST");
+      it.printf(w / 2, 100, id(font_body), black, TextAlign::TOP_CENTER,
+                "BASEMENT NAVIGATION");
 
-      // Large static touch-test targets. Touches do not redraw the e-paper.
-      it.rectangle(40, 250, w - 80, 150, black);
-      it.line(40, 325, w - 40, 325, black);
-      it.line(w / 2, 250, w / 2, 400, black);
-      it.printf(w / 2, 418, id(font_body), black, TextAlign::TOP_CENTER,
-                "TOUCH ANY QUADRANT");
+      // Up
+      it.rectangle(160, 150, 160, 120, black);
+      it.printf(240, 193, id(font_heading), black, TextAlign::TOP_CENTER, "UP");
 
-      it.rectangle(40, 510, w - 80, 150, black);
-      it.printf(w / 2, 548, id(font_body), black, TextAlign::TOP_CENTER,
-                "GPIO4  GPIO5  GPIO6");
-      it.printf(w / 2, 588, id(font_body), black, TextAlign::TOP_CENTER,
-                "POWER   UP   DOWN");
+      // Middle row: left, select, right
+      it.rectangle(20, 290, 130, 160, black);
+      it.printf(85, 350, id(font_body), black, TextAlign::TOP_CENTER, "LEFT");
 
-      it.printf(w / 2, h - 64, id(font_body), black, TextAlign::TOP_CENTER,
-                "480 x 800 PORTRAIT");
+      it.filled_rectangle(170, 290, 140, 160, black);
+      it.printf(240, 348, id(font_heading), white, TextAlign::TOP_CENTER, "OK");
+
+      it.rectangle(330, 290, 130, 160, black);
+      it.printf(395, 350, id(font_body), black, TextAlign::TOP_CENTER, "RIGHT");
+
+      // Down
+      it.rectangle(160, 470, 160, 120, black);
+      it.printf(240, 513, id(font_heading), black, TextAlign::TOP_CENTER, "DOWN");
+
+      it.line(40, 650, w - 40, 650, black);
+      it.printf(w / 2, 682, id(font_body), black, TextAlign::TOP_CENTER,
+                "HOME ASSISTANT");
+      it.printf(w / 2, 722, id(font_body), black, TextAlign::TOP_CENTER,
+                "ENCRYPTED API");
 
 touchscreen:
   - platform: gt911
@@ -268,6 +330,23 @@ touchscreen:
         - sensor.template.publish:
             id: last_touch_y
             state: !lambda return touch.y;
+        - lambda: |-
+            const int x = touch.x;
+            const int y = touch.y;
+
+            if (x >= 160 && x < 320 && y >= 150 && y < 270) {
+              id(apple_tv_up).execute();
+            } else if (x >= 20 && x < 150 && y >= 290 && y < 450) {
+              id(apple_tv_left).execute();
+            } else if (x >= 170 && x < 310 && y >= 290 && y < 450) {
+              id(apple_tv_select).execute();
+            } else if (x >= 330 && x < 460 && y >= 290 && y < 450) {
+              id(apple_tv_right).execute();
+            } else if (x >= 160 && x < 320 && y >= 470 && y < 590) {
+              id(apple_tv_down).execute();
+            } else {
+              ESP_LOGD("touch", "Touch was outside a control");
+            }
 
 button:
   - platform: template
