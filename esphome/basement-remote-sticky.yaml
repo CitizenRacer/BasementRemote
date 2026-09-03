@@ -139,7 +139,7 @@ binary_sensor:
 
   - platform: gpio
     id: button_up
-    name: "Up Button"
+    name: "Volume Up Button"
     pin:
       number: GPIO5
       mode:
@@ -150,11 +150,19 @@ binary_sensor:
       - delayed_on: 10ms
       - delayed_off: 10ms
     on_press:
-      - logger.log: "Up button pressed"
+      - logger.log: "Physical volume up button pressed"
+      - script.execute: apple_tv_volume_up
+      - delay: 500ms
+      - while:
+          condition:
+            binary_sensor.is_on: button_up
+          then:
+            - script.execute: apple_tv_volume_up
+            - delay: 175ms
 
   - platform: gpio
     id: button_down
-    name: "Down Button"
+    name: "Volume Down Button"
     pin:
       number: GPIO6
       mode:
@@ -165,13 +173,132 @@ binary_sensor:
       - delayed_on: 10ms
       - delayed_off: 10ms
     on_press:
-      - logger.log: "Down button pressed"
+      - logger.log: "Physical volume down button pressed"
+      - script.execute: apple_tv_volume_down
+      - delay: 500ms
+      - while:
+          condition:
+            binary_sensor.is_on: button_down
+          then:
+            - script.execute: apple_tv_volume_down
+            - delay: 175ms
 
+
+globals:
+  - id: touch_active
+    type: bool
+    restore_value: false
+    initial_value: "false"
+
+  - id: touch_start_x
+    type: int
+    restore_value: false
+    initial_value: "-1"
+
+  - id: touch_start_y
+    type: int
+    restore_value: false
+    initial_value: "-1"
+
+  - id: touch_started_ms
+    type: uint32_t
+    restore_value: false
+    initial_value: "0"
+
+  - id: touch_last_repeat_ms
+    type: uint32_t
+    restore_value: false
+    initial_value: "0"
+
+  # 0 = not repeatable; 1..7 = up/down/left/right/select/volume down/up.
+  - id: touch_repeat_command
+    type: int
+    restore_value: false
+    initial_value: "0"
 
 script:
-  # These are the same five remote.send_command actions used by the working
-  # Home Assistant Basement Remote dashboard. Keeping each action explicit
-  # makes the device behavior easy to audit and extend.
+  # Remote commands match the Apple TV defaults used by the working
+  # custom:universal-remote-card dashboard.
+  - id: apple_tv_wakeup
+    mode: restart
+    then:
+      - logger.log: "Apple TV command: wakeup"
+      - homeassistant.action:
+          action: remote.send_command
+          data:
+            entity_id: remote.basement_apple_tv
+            command: wakeup
+
+  - id: apple_tv_suspend
+    mode: restart
+    then:
+      - logger.log: "Apple TV command: suspend"
+      - homeassistant.action:
+          action: remote.send_command
+          data:
+            entity_id: remote.basement_apple_tv
+            command: suspend
+
+  - id: apple_tv_menu
+    mode: restart
+    then:
+      - logger.log: "Apple TV command: menu"
+      - homeassistant.action:
+          action: remote.send_command
+          data:
+            entity_id: remote.basement_apple_tv
+            command: menu
+
+  - id: apple_tv_home
+    mode: restart
+    then:
+      - logger.log: "Apple TV command: home"
+      - homeassistant.action:
+          action: remote.send_command
+          data:
+            entity_id: remote.basement_apple_tv
+            command: home
+
+  - id: apple_tv_skip_backward
+    mode: restart
+    then:
+      - logger.log: "Apple TV command: skip_backward"
+      - homeassistant.action:
+          action: remote.send_command
+          data:
+            entity_id: remote.basement_apple_tv
+            command: skip_backward
+
+  - id: apple_tv_play
+    mode: restart
+    then:
+      - logger.log: "Apple TV command: play"
+      - homeassistant.action:
+          action: remote.send_command
+          data:
+            entity_id: remote.basement_apple_tv
+            command: play
+
+  - id: apple_tv_pause
+    mode: restart
+    then:
+      - logger.log: "Apple TV command: pause"
+      - homeassistant.action:
+          action: remote.send_command
+          data:
+            entity_id: remote.basement_apple_tv
+            command: pause
+
+  - id: apple_tv_skip_forward
+    mode: restart
+    then:
+      - logger.log: "Apple TV command: skip_forward"
+      - homeassistant.action:
+          action: remote.send_command
+          data:
+            entity_id: remote.basement_apple_tv
+            command: skip_forward
+
   - id: apple_tv_up
     mode: restart
     then:
@@ -222,6 +349,112 @@ script:
             entity_id: remote.basement_apple_tv
             command: select
 
+  - id: apple_tv_volume_down
+    mode: restart
+    then:
+      - logger.log: "Apple TV command: volume_down"
+      - homeassistant.action:
+          action: remote.send_command
+          data:
+            entity_id: remote.basement_apple_tv
+            command: volume_down
+
+  - id: apple_tv_volume_up
+    mode: restart
+    then:
+      - logger.log: "Apple TV command: volume_up"
+      - homeassistant.action:
+          action: remote.send_command
+          data:
+            entity_id: remote.basement_apple_tv
+            command: volume_up
+
+  - id: sonos_toggle_mute
+    mode: restart
+    then:
+      - logger.log: "Sonos Arc command: toggle mute"
+      - homeassistant.action:
+          action: media_player.volume_mute
+          data:
+            entity_id: media_player.basement_sonos_arc
+          data_template:
+            is_volume_muted: >-
+              {{ not state_attr('media_player.basement_sonos_arc',
+                                'is_volume_muted') }}
+
+  # App source names are verified against media_player.basement_apple_tv's
+  # current source_list. HBO Max intentionally differs from the card's newer
+  # generic "Max" default because this Apple TV reports "HBO Max".
+  - id: launch_netflix
+    mode: restart
+    then:
+      - logger.log: "Apple TV source: Netflix"
+      - homeassistant.action:
+          action: media_player.select_source
+          data:
+            entity_id: media_player.basement_apple_tv
+            source: Netflix
+
+  - id: launch_disney
+    mode: restart
+    then:
+      - logger.log: "Apple TV source: Disney+"
+      - homeassistant.action:
+          action: media_player.select_source
+          data:
+            entity_id: media_player.basement_apple_tv
+            source: "Disney+"
+
+  - id: launch_prime_video
+    mode: restart
+    then:
+      - logger.log: "Apple TV source: Prime Video"
+      - homeassistant.action:
+          action: media_player.select_source
+          data:
+            entity_id: media_player.basement_apple_tv
+            source: "Prime Video"
+
+  - id: launch_paramount
+    mode: restart
+    then:
+      - logger.log: "Apple TV source: Paramount+"
+      - homeassistant.action:
+          action: media_player.select_source
+          data:
+            entity_id: media_player.basement_apple_tv
+            source: "Paramount+"
+
+  - id: launch_hulu
+    mode: restart
+    then:
+      - logger.log: "Apple TV source: Hulu"
+      - homeassistant.action:
+          action: media_player.select_source
+          data:
+            entity_id: media_player.basement_apple_tv
+            source: Hulu
+
+  - id: launch_hbo_max
+    mode: restart
+    then:
+      - logger.log: "Apple TV source: HBO Max"
+      - homeassistant.action:
+          action: media_player.select_source
+          data:
+            entity_id: media_player.basement_apple_tv
+            source: "HBO Max"
+
+  - id: launch_apple_tv
+    mode: restart
+    then:
+      - logger.log: "Apple TV source: TV"
+      - homeassistant.action:
+          action: media_player.select_source
+          data:
+            entity_id: media_player.basement_apple_tv
+            source: TV
+
 sensor:
   - platform: wifi_signal
     name: "Wi-Fi Signal"
@@ -260,6 +493,11 @@ font:
     size: 22
     glyphs: " abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-+/.:"
 
+  - file: "gfonts://Inter@700"
+    id: font_small
+    size: 16
+    glyphs: " ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-+"
+
 display:
   - platform: epaper_spi
     id: epaper_display
@@ -277,38 +515,69 @@ display:
       it.fill(white);
       it.rectangle(0, 0, w, h, black);
 
-      // Mostly-static e-paper face. Coordinates below are also the touch
-      // targets used in sticky_touch.on_touch.
-      it.filled_rectangle(0, 0, w, 82, black);
-      it.printf(w / 2, 22, id(font_heading), white, TextAlign::TOP_CENTER,
-                "APPLE TV");
+      // Static full remote face. Every rectangle exactly matches a touch
+      // target in sticky_touch.on_touch/on_release.
+      it.filled_rectangle(0, 0, w, 70, black);
+      it.printf(w / 2, 18, id(font_heading), white, TextAlign::TOP_CENTER,
+                "BASEMENT REMOTE");
 
-      it.printf(w / 2, 100, id(font_body), black, TextAlign::TOP_CENTER,
-                "BASEMENT NAVIGATION");
+      // Power, menu, home.
+      it.rectangle(10, 82, 146, 68, black);
+      it.printf(83, 105, id(font_body), black, TextAlign::TOP_CENTER, "POWER");
+      it.rectangle(167, 82, 146, 68, black);
+      it.printf(240, 105, id(font_body), black, TextAlign::TOP_CENTER, "MENU");
+      it.rectangle(324, 82, 146, 68, black);
+      it.printf(397, 105, id(font_body), black, TextAlign::TOP_CENTER, "HOME");
 
-      // Up
-      it.rectangle(160, 150, 160, 120, black);
-      it.printf(240, 193, id(font_heading), black, TextAlign::TOP_CENTER, "UP");
+      // Playback.
+      it.rectangle(8, 160, 110, 68, black);
+      it.printf(63, 183, id(font_small), black, TextAlign::TOP_CENTER, "SKIP-");
+      it.rectangle(126, 160, 110, 68, black);
+      it.printf(181, 183, id(font_small), black, TextAlign::TOP_CENTER, "PLAY");
+      it.rectangle(244, 160, 110, 68, black);
+      it.printf(299, 183, id(font_small), black, TextAlign::TOP_CENTER, "PAUSE");
+      it.rectangle(362, 160, 110, 68, black);
+      it.printf(417, 183, id(font_small), black, TextAlign::TOP_CENTER, "SKIP+");
 
-      // Middle row: left, select, right
-      it.rectangle(20, 290, 130, 160, black);
-      it.printf(85, 350, id(font_body), black, TextAlign::TOP_CENTER, "LEFT");
+      // D-pad.
+      it.rectangle(160, 238, 160, 80, black);
+      it.printf(240, 263, id(font_heading), black, TextAlign::TOP_CENTER, "UP");
+      it.rectangle(20, 328, 130, 90, black);
+      it.printf(85, 361, id(font_body), black, TextAlign::TOP_CENTER, "LEFT");
+      it.filled_rectangle(170, 328, 140, 90, black);
+      it.printf(240, 358, id(font_heading), white, TextAlign::TOP_CENTER, "OK");
+      it.rectangle(330, 328, 130, 90, black);
+      it.printf(395, 361, id(font_body), black, TextAlign::TOP_CENTER, "RIGHT");
+      it.rectangle(160, 428, 160, 80, black);
+      it.printf(240, 453, id(font_heading), black, TextAlign::TOP_CENTER, "DOWN");
 
-      it.filled_rectangle(170, 290, 140, 160, black);
-      it.printf(240, 348, id(font_heading), white, TextAlign::TOP_CENTER, "OK");
+      // Volume. Mute explicitly targets the Sonos Arc.
+      it.rectangle(10, 518, 146, 68, black);
+      it.printf(83, 541, id(font_body), black, TextAlign::TOP_CENTER, "VOL-");
+      it.rectangle(167, 518, 146, 68, black);
+      it.printf(240, 541, id(font_body), black, TextAlign::TOP_CENTER, "MUTE");
+      it.rectangle(324, 518, 146, 68, black);
+      it.printf(397, 541, id(font_body), black, TextAlign::TOP_CENTER, "VOL+");
 
-      it.rectangle(330, 290, 130, 160, black);
-      it.printf(395, 350, id(font_body), black, TextAlign::TOP_CENTER, "RIGHT");
+      it.printf(w / 2, 598, id(font_small), black, TextAlign::TOP_CENTER, "APPS");
 
-      // Down
-      it.rectangle(160, 470, 160, 120, black);
-      it.printf(240, 513, id(font_heading), black, TextAlign::TOP_CENTER, "DOWN");
+      // App row 1.
+      it.rectangle(4, 630, 113, 64, black);
+      it.printf(60, 653, id(font_small), black, TextAlign::TOP_CENTER, "NETFLIX");
+      it.rectangle(123, 630, 113, 64, black);
+      it.printf(179, 653, id(font_small), black, TextAlign::TOP_CENTER, "DISNEY+");
+      it.rectangle(242, 630, 113, 64, black);
+      it.printf(298, 653, id(font_small), black, TextAlign::TOP_CENTER, "PRIME");
+      it.rectangle(361, 630, 113, 64, black);
+      it.printf(417, 653, id(font_small), black, TextAlign::TOP_CENTER, "PARAMOUNT+");
 
-      it.line(40, 650, w - 40, 650, black);
-      it.printf(w / 2, 682, id(font_body), black, TextAlign::TOP_CENTER,
-                "HOME ASSISTANT");
-      it.printf(w / 2, 722, id(font_body), black, TextAlign::TOP_CENTER,
-                "ENCRYPTED API");
+      // App row 2.
+      it.rectangle(62, 714, 113, 64, black);
+      it.printf(118, 737, id(font_small), black, TextAlign::TOP_CENTER, "HULU");
+      it.rectangle(183, 714, 113, 64, black);
+      it.printf(239, 737, id(font_small), black, TextAlign::TOP_CENTER, "HBO MAX");
+      it.rectangle(304, 714, 113, 64, black);
+      it.printf(360, 737, id(font_small), black, TextAlign::TOP_CENTER, "APPLE TV");
 
 touchscreen:
   - platform: gt911
@@ -336,20 +605,119 @@ touchscreen:
         - lambda: |-
             const int x = touch.x;
             const int y = touch.y;
+            const uint32_t now = millis();
 
-            if (x >= 160 && x < 320 && y >= 150 && y < 270) {
+            id(touch_active) = true;
+            id(touch_start_x) = x;
+            id(touch_start_y) = y;
+            id(touch_started_ms) = now;
+            id(touch_last_repeat_ms) = now;
+            id(touch_repeat_command) = 0;
+
+            // Repeatable controls fire immediately, then the interval below
+            // repeats them after a deliberate hold.
+            if (x >= 160 && x < 320 && y >= 238 && y < 318) {
+              id(touch_repeat_command) = 1;
               id(apple_tv_up).execute();
-            } else if (x >= 20 && x < 150 && y >= 290 && y < 450) {
-              id(apple_tv_left).execute();
-            } else if (x >= 170 && x < 310 && y >= 290 && y < 450) {
-              id(apple_tv_select).execute();
-            } else if (x >= 330 && x < 460 && y >= 290 && y < 450) {
-              id(apple_tv_right).execute();
-            } else if (x >= 160 && x < 320 && y >= 470 && y < 590) {
+            } else if (x >= 160 && x < 320 && y >= 428 && y < 508) {
+              id(touch_repeat_command) = 2;
               id(apple_tv_down).execute();
-            } else {
-              ESP_LOGD("touch", "Touch was outside a control");
+            } else if (x >= 20 && x < 150 && y >= 328 && y < 418) {
+              id(touch_repeat_command) = 3;
+              id(apple_tv_left).execute();
+            } else if (x >= 330 && x < 460 && y >= 328 && y < 418) {
+              id(touch_repeat_command) = 4;
+              id(apple_tv_right).execute();
+            } else if (x >= 170 && x < 310 && y >= 328 && y < 418) {
+              id(touch_repeat_command) = 5;
+              id(apple_tv_select).execute();
+            } else if (x >= 10 && x < 156 && y >= 518 && y < 586) {
+              id(touch_repeat_command) = 6;
+              id(apple_tv_volume_down).execute();
+            } else if (x >= 324 && x < 470 && y >= 518 && y < 586) {
+              id(touch_repeat_command) = 7;
+              id(apple_tv_volume_up).execute();
             }
+    on_release:
+      then:
+        - lambda: |-
+            if (!id(touch_active)) {
+              return;
+            }
+
+            const int x = id(touch_start_x);
+            const int y = id(touch_start_y);
+            const uint32_t held_ms = millis() - id(touch_started_ms);
+
+            // Repeatable controls already fired on touch.
+            if (id(touch_repeat_command) == 0) {
+              if (x >= 10 && x < 156 && y >= 82 && y < 150) {
+                if (held_ms >= 800) {
+                  id(apple_tv_suspend).execute();
+                } else {
+                  id(apple_tv_wakeup).execute();
+                }
+              } else if (x >= 167 && x < 313 && y >= 82 && y < 150) {
+                id(apple_tv_menu).execute();
+              } else if (x >= 324 && x < 470 && y >= 82 && y < 150) {
+                id(apple_tv_home).execute();
+              } else if (x >= 8 && x < 118 && y >= 160 && y < 228) {
+                id(apple_tv_skip_backward).execute();
+              } else if (x >= 126 && x < 236 && y >= 160 && y < 228) {
+                id(apple_tv_play).execute();
+              } else if (x >= 244 && x < 354 && y >= 160 && y < 228) {
+                id(apple_tv_pause).execute();
+              } else if (x >= 362 && x < 472 && y >= 160 && y < 228) {
+                id(apple_tv_skip_forward).execute();
+              } else if (x >= 167 && x < 313 && y >= 518 && y < 586) {
+                id(sonos_toggle_mute).execute();
+              } else if (x >= 4 && x < 117 && y >= 630 && y < 694) {
+                id(launch_netflix).execute();
+              } else if (x >= 123 && x < 236 && y >= 630 && y < 694) {
+                id(launch_disney).execute();
+              } else if (x >= 242 && x < 355 && y >= 630 && y < 694) {
+                id(launch_prime_video).execute();
+              } else if (x >= 361 && x < 474 && y >= 630 && y < 694) {
+                id(launch_paramount).execute();
+              } else if (x >= 62 && x < 175 && y >= 714 && y < 778) {
+                id(launch_hulu).execute();
+              } else if (x >= 183 && x < 296 && y >= 714 && y < 778) {
+                id(launch_hbo_max).execute();
+              } else if (x >= 304 && x < 417 && y >= 714 && y < 778) {
+                id(launch_apple_tv).execute();
+              } else {
+                ESP_LOGD("touch", "Touch was outside a control");
+              }
+            }
+
+            id(touch_active) = false;
+            id(touch_repeat_command) = 0;
+
+interval:
+  - interval: 50ms
+    then:
+      - lambda: |-
+          if (!id(touch_active) || id(touch_repeat_command) == 0) {
+            return;
+          }
+
+          const uint32_t now = millis();
+          if ((now - id(touch_started_ms)) < 500 ||
+              (now - id(touch_last_repeat_ms)) < 175) {
+            return;
+          }
+          id(touch_last_repeat_ms) = now;
+
+          switch (id(touch_repeat_command)) {
+            case 1: id(apple_tv_up).execute(); break;
+            case 2: id(apple_tv_down).execute(); break;
+            case 3: id(apple_tv_left).execute(); break;
+            case 4: id(apple_tv_right).execute(); break;
+            case 5: id(apple_tv_select).execute(); break;
+            case 6: id(apple_tv_volume_down).execute(); break;
+            case 7: id(apple_tv_volume_up).execute(); break;
+            default: break;
+          }
 
 button:
   - platform: template
