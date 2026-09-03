@@ -2,7 +2,7 @@
 
 Touchscreen TV remote firmware for the **Seeed Studio reTerminal Sticky**, backed directly by Home Assistant over ESPHome's encrypted native API.
 
-Current firmware: **v0.2.0** — complete remote control surface.
+Current firmware: **v0.2.2** — simplified physical-button remote.
 
 ## Architecture
 
@@ -40,9 +40,7 @@ The installed `custom:universal-remote-card` is configured as Apple TV and estab
 - Playback: Apple TV remote commands `play`, `pause`, `skip_backward`, and `skip_forward`
 - Volume up/down: Apple TV remote commands `volume_up` / `volume_down`
 - Mute: **explicitly target `media_player.basement_sonos_arc`** because the Apple TV media player does not expose mute
-- App sources: `Netflix`, `Disney+`, `Prime Video`, `Paramount+`, `Hulu`, `HBO Max`, and `TV`
-
-The HBO Max launcher deliberately uses `HBO Max`, verified against this Apple TV's live `source_list`, rather than the card library's newer generic `Max` default.
+The working dashboard also provides app launchers. Firmware v0.2.2 intentionally omits app launchers from the Sticky's simplified screen.
 
 Home Assistant must be configured to **Allow the device to perform Home Assistant actions** for this ESPHome integration.
 
@@ -183,7 +181,7 @@ For repository/CI development, `.github/workflows/esphome.yml` creates a local p
 
 ### Phase 2 — complete remote UI (current)
 
-Firmware v0.2.0 presents the complete 480×800 portrait remote face and calls Home Assistant directly over the encrypted native API.
+Firmware v0.2.2 presents a simplified 480×800 portrait remote face and calls Home Assistant directly over the encrypted native API.
 
 Implemented controls:
 
@@ -191,22 +189,23 @@ Implemented controls:
 - Menu and Home
 - Skip backward, Play, Pause, and Skip forward
 - Up, Down, Left, Right, and Select
-- Hold-to-repeat for D-pad and touchscreen volume controls
-- Volume down, Sonos Arc mute toggle, and volume up
-- Physical GPIO5/GPIO6 buttons as volume up/down, including hold-to-repeat
-- Netflix, Disney+, Prime Video, Paramount+, Hulu, HBO Max, and Apple TV app launchers
-- Boot completion log: `Basement Remote firmware 0.2.0 ready`
+- Hold-to-repeat for the touchscreen D-pad
+- Large touchscreen Sonos Arc mute toggle
+- Physical GPIO5/GPIO6 side buttons as volume up/down, including hold-to-repeat
+- No on-screen volume up/down controls
+- No app launchers on the Sticky screen
+- Boot completion log: `Basement Remote firmware 0.2.2 ready`
 
 The e-paper face remains static during normal use; control presses do not trigger slow display refreshes.
 
 ### Phase 2 test checklist
 
 1. In Home Assistant, enable **Allow the device to perform Home Assistant actions** for the Basement Remote Sticky ESPHome integration.
-2. Install v0.2.0 from the GitHub-backed Device Builder wrapper.
-3. Confirm the boot log contains `Basement Remote firmware 0.2.0 ready`.
-4. Test Power tap and hold, Menu, Home, all four playback buttons, D-pad/Select, volume/mute, and all seven launchers.
-5. Hold each D-pad direction and each volume control to confirm repeat behavior.
-6. Test the physical volume up/down buttons with both tap and hold.
+2. Install v0.2.2 from the GitHub-backed Device Builder wrapper.
+3. Confirm the boot log contains `Basement Remote firmware 0.2.2 ready`.
+4. Test Power tap and hold, Menu, Home, all four playback buttons, D-pad/Select, and mute.
+5. Hold each D-pad direction to confirm repeat behavior.
+6. Test both physical side volume buttons with tap and hold.
 
 ### Phase 3 — useful state
 
