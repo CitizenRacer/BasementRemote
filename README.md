@@ -4,6 +4,10 @@ Touchscreen TV remote firmware for the **Seeed Studio reTerminal Sticky**, backe
 
 Current firmware on `main`: **v0.2.14**. The authoritative version is the `firmware_version` substitution in [`esphome/basement-remote-sticky.yaml`](esphome/basement-remote-sticky.yaml).
 
+<p align="center">
+  <img src="docs/basement-remote.jpg" alt="Seeed Studio reTerminal Sticky running the Basement Remote interface" width="420">
+</p>
+
 ## Architecture
 
 The Sticky is another front end for the already-working Home Assistant **Basement Remote** setup. It uses the same Apple TV and TV entities directly rather than introducing a second remote-control architecture.
@@ -149,6 +153,8 @@ The ESP32-S3 configuration uses 32 MB flash and 8 MB octal PSRAM. ESPHome's inte
 assets/
   disney-d.png                       # Disney+ launcher artwork
   paramount-plus.svg                 # Paramount+ launcher artwork
+docs/
+  basement-remote.jpg                # Photo of the completed remote
 esphome/
   basement-remote-sticky.yaml        # Canonical production firmware package
   device-builder-wrapper.example.yaml
@@ -158,7 +164,7 @@ README.md
 
 [`esphome/basement-remote-sticky.yaml`](esphome/basement-remote-sticky.yaml) is the firmware source of truth. The ESPHome Device Builder configuration should remain a small local wrapper that resolves secrets and imports the production package from GitHub `main`.
 
-The two files under `assets/` are required by the production firmware. The example wrapper and example secrets file are intentionally retained because they document the supported Device Builder deployment pattern without storing credentials.
+The two files under `assets/` are required by the production firmware. The example wrapper and example secrets file are intentionally retained because they document the supported Device Builder deployment pattern without storing credentials. The photo under `docs/` is used by this README to show the finished hardware and UI.
 
 ## ESPHome Device Builder setup
 
