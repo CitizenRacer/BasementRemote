@@ -6,7 +6,7 @@
 substitutions:
   device_name: basement-remote-sticky
   friendly_name: Basement Remote Sticky
-  firmware_version: "0.2.3"
+  firmware_version: "0.2.4"
 
 esphome:
   name: ${device_name}
@@ -410,27 +410,13 @@ text_sensor:
       name: "IP Address"
 
 font:
-  - file: "gfonts://Inter@700"
-    id: font_heading
-    size: 32
-    glyphs: " ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-+/"
-
-  - file: "gfonts://Inter@500"
-    id: font_body
-    size: 22
-    glyphs: " abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-+/.:"
-
-  - file: "gfonts://Inter@700"
-    id: font_small
-    size: 16
-    glyphs: " ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-+"
-
   # Material Design Icons v7.4.47, pinned so glyph codepoints cannot drift.
+  # This is the only display font: the remote face intentionally has no text.
   - file:
       type: web
       url: https://raw.githubusercontent.com/Templarian/MaterialDesign-Webfont/v7.4.47/fonts/materialdesignicons-webfont.ttf
     id: font_mdi
-    size: 46
+    size: 60
     bpp: 1
     glyphsets: []
     glyphs:
@@ -465,52 +451,42 @@ display:
       it.fill(white);
       it.rectangle(0, 0, w, h, black);
 
-      // Static full remote face. Every rectangle exactly matches a touch
-      // target in sticky_touch.on_touch/on_release.
-      it.filled_rectangle(0, 0, w, 70, black);
-      it.printf(w / 2, 18, id(font_heading), white, TextAlign::TOP_CENTER,
-                "BASEMENT REMOTE");
+      // Full-height, icon-only remote face. Every rectangle exactly matches
+      // a touch target in sticky_touch.on_touch/on_release.
 
       // Power, menu, home.
-      it.rectangle(10, 82, 146, 68, black);
-      it.printf(83, 116, id(font_mdi), black, TextAlign::CENTER, "\U000F0425");
-      it.rectangle(167, 82, 146, 68, black);
-      it.printf(240, 116, id(font_mdi), black, TextAlign::CENTER, "\U000F035C");
-      it.rectangle(324, 82, 146, 68, black);
-      it.printf(397, 116, id(font_mdi), black, TextAlign::CENTER, "\U000F02DC");
+      it.rectangle(10, 20, 146, 100, black);
+      it.printf(83, 70, id(font_mdi), black, TextAlign::CENTER, "\U000F0425");
+      it.rectangle(167, 20, 146, 100, black);
+      it.printf(240, 70, id(font_mdi), black, TextAlign::CENTER, "\U000F035C");
+      it.rectangle(324, 20, 146, 100, black);
+      it.printf(397, 70, id(font_mdi), black, TextAlign::CENTER, "\U000F02DC");
 
       // Playback.
-      it.rectangle(8, 160, 110, 68, black);
-      it.printf(63, 194, id(font_mdi), black, TextAlign::CENTER, "\U000F04AB");
-      it.rectangle(126, 160, 110, 68, black);
-      it.printf(181, 194, id(font_mdi), black, TextAlign::CENTER, "\U000F040A");
-      it.rectangle(244, 160, 110, 68, black);
-      it.printf(299, 194, id(font_mdi), black, TextAlign::CENTER, "\U000F03E4");
-      it.rectangle(362, 160, 110, 68, black);
-      it.printf(417, 194, id(font_mdi), black, TextAlign::CENTER, "\U000F04AC");
+      it.rectangle(8, 140, 110, 100, black);
+      it.printf(63, 190, id(font_mdi), black, TextAlign::CENTER, "\U000F04AB");
+      it.rectangle(126, 140, 110, 100, black);
+      it.printf(181, 190, id(font_mdi), black, TextAlign::CENTER, "\U000F040A");
+      it.rectangle(244, 140, 110, 100, black);
+      it.printf(299, 190, id(font_mdi), black, TextAlign::CENTER, "\U000F03E4");
+      it.rectangle(362, 140, 110, 100, black);
+      it.printf(417, 190, id(font_mdi), black, TextAlign::CENTER, "\U000F04AC");
 
       // D-pad.
-      it.rectangle(160, 238, 160, 80, black);
-      it.printf(240, 278, id(font_mdi), black, TextAlign::CENTER, "\U000F0143");
-      it.rectangle(20, 328, 130, 90, black);
-      it.printf(85, 373, id(font_mdi), black, TextAlign::CENTER, "\U000F0141");
-      it.filled_rectangle(170, 328, 140, 90, black);
-      it.printf(240, 373, id(font_mdi), white, TextAlign::CENTER, "\U000F0766");
-      it.rectangle(330, 328, 130, 90, black);
-      it.printf(395, 373, id(font_mdi), black, TextAlign::CENTER, "\U000F0142");
-      it.rectangle(160, 428, 160, 80, black);
-      it.printf(240, 468, id(font_mdi), black, TextAlign::CENTER, "\U000F0140");
+      it.rectangle(145, 270, 190, 110, black);
+      it.printf(240, 325, id(font_mdi), black, TextAlign::CENTER, "\U000F0143");
+      it.rectangle(20, 400, 135, 140, black);
+      it.printf(87, 470, id(font_mdi), black, TextAlign::CENTER, "\U000F0141");
+      it.filled_rectangle(172, 400, 136, 140, black);
+      it.printf(240, 470, id(font_mdi), white, TextAlign::CENTER, "\U000F0766");
+      it.rectangle(325, 400, 135, 140, black);
+      it.printf(392, 470, id(font_mdi), black, TextAlign::CENTER, "\U000F0142");
+      it.rectangle(145, 560, 190, 110, black);
+      it.printf(240, 615, id(font_mdi), black, TextAlign::CENTER, "\U000F0140");
 
-      // Volume is handled by the two physical side buttons. Keep a large
-      // touchscreen mute control because there is no physical mute button.
-      it.filled_rectangle(120, 540, 240, 90, black);
-      it.printf(240, 585, id(font_mdi), white, TextAlign::CENTER, "\U000F075F");
-
-      it.line(60, 674, w - 60, 674, black);
-      it.printf(w / 2, 698, id(font_body), black, TextAlign::TOP_CENTER,
-                "SIDE BUTTONS: VOLUME");
-      it.printf(w / 2, 742, id(font_small), black, TextAlign::TOP_CENTER,
-                "FIRMWARE ${firmware_version}");
+      // Volume is handled by the two physical side buttons.
+      it.filled_rectangle(120, 690, 240, 90, black);
+      it.printf(240, 735, id(font_mdi), white, TextAlign::CENTER, "\U000F075F");
 
 touchscreen:
   - platform: gt911
@@ -549,19 +525,19 @@ touchscreen:
 
             // Repeatable controls fire immediately, then the interval below
             // repeats them after a deliberate hold.
-            if (x >= 160 && x < 320 && y >= 238 && y < 318) {
+            if (x >= 145 && x < 335 && y >= 270 && y < 380) {
               id(touch_repeat_command) = 1;
               id(apple_tv_up).execute();
-            } else if (x >= 160 && x < 320 && y >= 428 && y < 508) {
+            } else if (x >= 145 && x < 335 && y >= 560 && y < 670) {
               id(touch_repeat_command) = 2;
               id(apple_tv_down).execute();
-            } else if (x >= 20 && x < 150 && y >= 328 && y < 418) {
+            } else if (x >= 20 && x < 155 && y >= 400 && y < 540) {
               id(touch_repeat_command) = 3;
               id(apple_tv_left).execute();
-            } else if (x >= 330 && x < 460 && y >= 328 && y < 418) {
+            } else if (x >= 325 && x < 460 && y >= 400 && y < 540) {
               id(touch_repeat_command) = 4;
               id(apple_tv_right).execute();
-            } else if (x >= 170 && x < 310 && y >= 328 && y < 418) {
+            } else if (x >= 172 && x < 308 && y >= 400 && y < 540) {
               id(touch_repeat_command) = 5;
               id(apple_tv_select).execute();
             }
@@ -578,25 +554,25 @@ touchscreen:
 
             // Repeatable controls already fired on touch.
             if (id(touch_repeat_command) == 0) {
-              if (x >= 10 && x < 156 && y >= 82 && y < 150) {
+              if (x >= 10 && x < 156 && y >= 20 && y < 120) {
                 if (held_ms >= 800) {
                   id(apple_tv_suspend).execute();
                 } else {
                   id(apple_tv_wakeup).execute();
                 }
-              } else if (x >= 167 && x < 313 && y >= 82 && y < 150) {
+              } else if (x >= 167 && x < 313 && y >= 20 && y < 120) {
                 id(apple_tv_menu).execute();
-              } else if (x >= 324 && x < 470 && y >= 82 && y < 150) {
+              } else if (x >= 324 && x < 470 && y >= 20 && y < 120) {
                 id(apple_tv_home).execute();
-              } else if (x >= 8 && x < 118 && y >= 160 && y < 228) {
+              } else if (x >= 8 && x < 118 && y >= 140 && y < 240) {
                 id(apple_tv_skip_backward).execute();
-              } else if (x >= 126 && x < 236 && y >= 160 && y < 228) {
+              } else if (x >= 126 && x < 236 && y >= 140 && y < 240) {
                 id(apple_tv_play).execute();
-              } else if (x >= 244 && x < 354 && y >= 160 && y < 228) {
+              } else if (x >= 244 && x < 354 && y >= 140 && y < 240) {
                 id(apple_tv_pause).execute();
-              } else if (x >= 362 && x < 472 && y >= 160 && y < 228) {
+              } else if (x >= 362 && x < 472 && y >= 140 && y < 240) {
                 id(apple_tv_skip_forward).execute();
-              } else if (x >= 120 && x < 360 && y >= 540 && y < 630) {
+              } else if (x >= 120 && x < 360 && y >= 690 && y < 780) {
                 id(sonos_toggle_mute).execute();
               } else {
                 ESP_LOGD("touch", "Touch was outside a control");
