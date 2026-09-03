@@ -186,7 +186,7 @@ Firmware v0.2.6 presents a simplified 480×800 portrait remote face and calls Ho
 
 Implemented controls:
 
-- A completely text-free screen using pinned Heroicons SVG assets
+- A completely text-free screen using pinned Heroicons SVG assets and rounded control boxes
 - Isolated Power control in the upper-right
 - A dominant D-pad at the top, followed by Back/Home, playback, and mute
 - Power: tap sends `wakeup`; hold for at least 800 ms sends `suspend`
