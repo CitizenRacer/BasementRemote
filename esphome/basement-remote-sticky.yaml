@@ -419,57 +419,31 @@ image:
       resize: 60x60
     files:
       - id: icon_power
-        file:
-          source: web
-          url: https://raw.githubusercontent.com/tailwindlabs/heroicons/v2.2.0/optimized/24/solid/power.svg
+        file: https://raw.githubusercontent.com/tailwindlabs/heroicons/v2.2.0/optimized/24/solid/power.svg
       - id: icon_back
-        file:
-          source: web
-          url: https://raw.githubusercontent.com/tailwindlabs/heroicons/v2.2.0/optimized/24/solid/arrow-uturn-left.svg
+        file: https://raw.githubusercontent.com/tailwindlabs/heroicons/v2.2.0/optimized/24/solid/arrow-uturn-left.svg
       - id: icon_home
-        file:
-          source: web
-          url: https://raw.githubusercontent.com/tailwindlabs/heroicons/v2.2.0/optimized/24/solid/home.svg
+        file: https://raw.githubusercontent.com/tailwindlabs/heroicons/v2.2.0/optimized/24/solid/home.svg
       - id: icon_skip_backward
-        file:
-          source: web
-          url: https://raw.githubusercontent.com/tailwindlabs/heroicons/v2.2.0/optimized/24/solid/backward.svg
+        file: https://raw.githubusercontent.com/tailwindlabs/heroicons/v2.2.0/optimized/24/solid/backward.svg
       - id: icon_play
-        file:
-          source: web
-          url: https://raw.githubusercontent.com/tailwindlabs/heroicons/v2.2.0/optimized/24/solid/play.svg
+        file: https://raw.githubusercontent.com/tailwindlabs/heroicons/v2.2.0/optimized/24/solid/play.svg
       - id: icon_pause
-        file:
-          source: web
-          url: https://raw.githubusercontent.com/tailwindlabs/heroicons/v2.2.0/optimized/24/solid/pause.svg
+        file: https://raw.githubusercontent.com/tailwindlabs/heroicons/v2.2.0/optimized/24/solid/pause.svg
       - id: icon_skip_forward
-        file:
-          source: web
-          url: https://raw.githubusercontent.com/tailwindlabs/heroicons/v2.2.0/optimized/24/solid/forward.svg
+        file: https://raw.githubusercontent.com/tailwindlabs/heroicons/v2.2.0/optimized/24/solid/forward.svg
       - id: icon_up
-        file:
-          source: web
-          url: https://raw.githubusercontent.com/tailwindlabs/heroicons/v2.2.0/optimized/24/solid/chevron-up.svg
+        file: https://raw.githubusercontent.com/tailwindlabs/heroicons/v2.2.0/optimized/24/solid/chevron-up.svg
       - id: icon_down
-        file:
-          source: web
-          url: https://raw.githubusercontent.com/tailwindlabs/heroicons/v2.2.0/optimized/24/solid/chevron-down.svg
+        file: https://raw.githubusercontent.com/tailwindlabs/heroicons/v2.2.0/optimized/24/solid/chevron-down.svg
       - id: icon_left
-        file:
-          source: web
-          url: https://raw.githubusercontent.com/tailwindlabs/heroicons/v2.2.0/optimized/24/solid/chevron-left.svg
+        file: https://raw.githubusercontent.com/tailwindlabs/heroicons/v2.2.0/optimized/24/solid/chevron-left.svg
       - id: icon_right
-        file:
-          source: web
-          url: https://raw.githubusercontent.com/tailwindlabs/heroicons/v2.2.0/optimized/24/solid/chevron-right.svg
+        file: https://raw.githubusercontent.com/tailwindlabs/heroicons/v2.2.0/optimized/24/solid/chevron-right.svg
       - id: icon_select
-        file:
-          source: web
-          url: https://raw.githubusercontent.com/tailwindlabs/heroicons/v2.2.0/optimized/24/solid/check.svg
+        file: https://raw.githubusercontent.com/tailwindlabs/heroicons/v2.2.0/optimized/24/solid/check.svg
       - id: icon_mute
-        file:
-          source: web
-          url: https://raw.githubusercontent.com/tailwindlabs/heroicons/v2.2.0/optimized/24/solid/speaker-x-mark.svg
+        file: https://raw.githubusercontent.com/tailwindlabs/heroicons/v2.2.0/optimized/24/solid/speaker-x-mark.svg
 display:
   - platform: epaper_spi
     id: epaper_display
