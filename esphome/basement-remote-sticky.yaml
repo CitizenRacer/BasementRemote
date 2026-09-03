@@ -6,7 +6,7 @@
 substitutions:
   device_name: basement-remote-sticky
   friendly_name: Basement Remote Sticky
-  firmware_version: "0.2.4"
+  firmware_version: "0.2.5"
 
 esphome:
   name: ${device_name}
@@ -421,7 +421,7 @@ font:
     glyphsets: []
     glyphs:
       - "\U000F0425" # mdi-power
-      - "\U000F035C" # mdi-menu
+      - "\U000F004D" # mdi-arrow-left (Apple TV menu/back)
       - "\U000F02DC" # mdi-home
       - "\U000F04AB" # mdi-skip-backward
       - "\U000F040A" # mdi-play
@@ -451,41 +451,44 @@ display:
       it.fill(white);
       it.rectangle(0, 0, w, h, black);
 
-      // Full-height, icon-only remote face. Every rectangle exactly matches
-      // a touch target in sticky_touch.on_touch/on_release.
+      // Full-height, icon-only remote face. The control hierarchy follows
+      // modern Apple TV / Google TV conventions: isolated power, dominant
+      // D-pad, back/home directly below, transport controls, then mute.
 
-      // Power, menu, home.
-      it.rectangle(10, 20, 146, 100, black);
-      it.printf(83, 70, id(font_mdi), black, TextAlign::CENTER, "\U000F0425");
-      it.rectangle(167, 20, 146, 100, black);
-      it.printf(240, 70, id(font_mdi), black, TextAlign::CENTER, "\U000F035C");
-      it.rectangle(324, 20, 146, 100, black);
-      it.printf(397, 70, id(font_mdi), black, TextAlign::CENTER, "\U000F02DC");
+      // Isolate the less-frequently used power control to prevent mis-taps.
+      it.rectangle(360, 20, 100, 80, black);
+      it.printf(410, 60, id(font_mdi), black, TextAlign::CENTER, "\U000F0425");
 
-      // Playback.
-      it.rectangle(8, 140, 110, 100, black);
-      it.printf(63, 190, id(font_mdi), black, TextAlign::CENTER, "\U000F04AB");
-      it.rectangle(126, 140, 110, 100, black);
-      it.printf(181, 190, id(font_mdi), black, TextAlign::CENTER, "\U000F040A");
-      it.rectangle(244, 140, 110, 100, black);
-      it.printf(299, 190, id(font_mdi), black, TextAlign::CENTER, "\U000F03E4");
-      it.rectangle(362, 140, 110, 100, black);
-      it.printf(417, 190, id(font_mdi), black, TextAlign::CENTER, "\U000F04AC");
+      // Primary navigation: largest and highest controls on the face.
+      it.rectangle(150, 110, 180, 90, black);
+      it.printf(240, 155, id(font_mdi), black, TextAlign::CENTER, "\U000F0143");
+      it.rectangle(30, 215, 120, 110, black);
+      it.printf(90, 270, id(font_mdi), black, TextAlign::CENTER, "\U000F0141");
+      it.filled_rectangle(170, 215, 140, 110, black);
+      it.printf(240, 270, id(font_mdi), white, TextAlign::CENTER, "\U000F0766");
+      it.rectangle(330, 215, 120, 110, black);
+      it.printf(390, 270, id(font_mdi), black, TextAlign::CENTER, "\U000F0142");
+      it.rectangle(150, 340, 180, 90, black);
+      it.printf(240, 385, id(font_mdi), black, TextAlign::CENTER, "\U000F0140");
 
-      // D-pad.
-      it.rectangle(145, 270, 190, 110, black);
-      it.printf(240, 325, id(font_mdi), black, TextAlign::CENTER, "\U000F0143");
-      it.rectangle(20, 400, 135, 140, black);
-      it.printf(87, 470, id(font_mdi), black, TextAlign::CENTER, "\U000F0141");
-      it.filled_rectangle(172, 400, 136, 140, black);
-      it.printf(240, 470, id(font_mdi), white, TextAlign::CENTER, "\U000F0766");
-      it.rectangle(325, 400, 135, 140, black);
-      it.printf(392, 470, id(font_mdi), black, TextAlign::CENTER, "\U000F0142");
-      it.rectangle(145, 560, 190, 110, black);
-      it.printf(240, 615, id(font_mdi), black, TextAlign::CENTER, "\U000F0140");
+      // Secondary navigation directly below the D-pad.
+      it.rectangle(60, 455, 160, 90, black);
+      it.printf(140, 500, id(font_mdi), black, TextAlign::CENTER, "\U000F004D");
+      it.rectangle(260, 455, 160, 90, black);
+      it.printf(340, 500, id(font_mdi), black, TextAlign::CENTER, "\U000F02DC");
+
+      // Playback transport.
+      it.rectangle(8, 565, 110, 90, black);
+      it.printf(63, 610, id(font_mdi), black, TextAlign::CENTER, "\U000F04AB");
+      it.rectangle(126, 565, 110, 90, black);
+      it.printf(181, 610, id(font_mdi), black, TextAlign::CENTER, "\U000F040A");
+      it.rectangle(244, 565, 110, 90, black);
+      it.printf(299, 610, id(font_mdi), black, TextAlign::CENTER, "\U000F03E4");
+      it.rectangle(362, 565, 110, 90, black);
+      it.printf(417, 610, id(font_mdi), black, TextAlign::CENTER, "\U000F04AC");
 
       // Volume is handled by the two physical side buttons.
-      it.filled_rectangle(120, 690, 240, 90, black);
+      it.filled_rectangle(160, 685, 160, 100, black);
       it.printf(240, 735, id(font_mdi), white, TextAlign::CENTER, "\U000F075F");
 
 touchscreen:
@@ -525,19 +528,19 @@ touchscreen:
 
             // Repeatable controls fire immediately, then the interval below
             // repeats them after a deliberate hold.
-            if (x >= 145 && x < 335 && y >= 270 && y < 380) {
+            if (x >= 150 && x < 330 && y >= 110 && y < 200) {
               id(touch_repeat_command) = 1;
               id(apple_tv_up).execute();
-            } else if (x >= 145 && x < 335 && y >= 560 && y < 670) {
+            } else if (x >= 150 && x < 330 && y >= 340 && y < 430) {
               id(touch_repeat_command) = 2;
               id(apple_tv_down).execute();
-            } else if (x >= 20 && x < 155 && y >= 400 && y < 540) {
+            } else if (x >= 30 && x < 150 && y >= 215 && y < 325) {
               id(touch_repeat_command) = 3;
               id(apple_tv_left).execute();
-            } else if (x >= 325 && x < 460 && y >= 400 && y < 540) {
+            } else if (x >= 330 && x < 450 && y >= 215 && y < 325) {
               id(touch_repeat_command) = 4;
               id(apple_tv_right).execute();
-            } else if (x >= 172 && x < 308 && y >= 400 && y < 540) {
+            } else if (x >= 170 && x < 310 && y >= 215 && y < 325) {
               id(touch_repeat_command) = 5;
               id(apple_tv_select).execute();
             }
@@ -554,25 +557,25 @@ touchscreen:
 
             // Repeatable controls already fired on touch.
             if (id(touch_repeat_command) == 0) {
-              if (x >= 10 && x < 156 && y >= 20 && y < 120) {
+              if (x >= 360 && x < 460 && y >= 20 && y < 100) {
                 if (held_ms >= 800) {
                   id(apple_tv_suspend).execute();
                 } else {
                   id(apple_tv_wakeup).execute();
                 }
-              } else if (x >= 167 && x < 313 && y >= 20 && y < 120) {
+              } else if (x >= 60 && x < 220 && y >= 455 && y < 545) {
                 id(apple_tv_menu).execute();
-              } else if (x >= 324 && x < 470 && y >= 20 && y < 120) {
+              } else if (x >= 260 && x < 420 && y >= 455 && y < 545) {
                 id(apple_tv_home).execute();
-              } else if (x >= 8 && x < 118 && y >= 140 && y < 240) {
+              } else if (x >= 8 && x < 118 && y >= 565 && y < 655) {
                 id(apple_tv_skip_backward).execute();
-              } else if (x >= 126 && x < 236 && y >= 140 && y < 240) {
+              } else if (x >= 126 && x < 236 && y >= 565 && y < 655) {
                 id(apple_tv_play).execute();
-              } else if (x >= 244 && x < 354 && y >= 140 && y < 240) {
+              } else if (x >= 244 && x < 354 && y >= 565 && y < 655) {
                 id(apple_tv_pause).execute();
-              } else if (x >= 362 && x < 472 && y >= 140 && y < 240) {
+              } else if (x >= 362 && x < 472 && y >= 565 && y < 655) {
                 id(apple_tv_skip_forward).execute();
-              } else if (x >= 120 && x < 360 && y >= 690 && y < 780) {
+              } else if (x >= 160 && x < 320 && y >= 685 && y < 785) {
                 id(sonos_toggle_mute).execute();
               } else {
                 ESP_LOGD("touch", "Touch was outside a control");
