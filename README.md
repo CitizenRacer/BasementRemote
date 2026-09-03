@@ -5,7 +5,7 @@ Touchscreen TV remote firmware for the **Seeed Studio reTerminal Sticky**, backe
 Current firmware on `main`: **v0.2.14**. The authoritative version is the `firmware_version` substitution in [`esphome/basement-remote-sticky.yaml`](esphome/basement-remote-sticky.yaml).
 
 <p align="center">
-  <img src="docs/basement-remote.jpg" alt="Seeed Studio reTerminal Sticky running the Basement Remote interface" width="420">
+  <img src="docs/remote.jpg" alt="Seeed Studio reTerminal Sticky running the Basement Remote interface" width="420">
 </p>
 
 ## Architecture
