@@ -6,7 +6,7 @@
 substitutions:
   device_name: basement-remote-sticky
   friendly_name: Basement Remote Sticky
-  firmware_version: "0.2.2"
+  firmware_version: "0.2.3"
 
 esphome:
   name: ${device_name}
@@ -425,6 +425,29 @@ font:
     size: 16
     glyphs: " ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-+"
 
+  # Material Design Icons v7.4.47, pinned so glyph codepoints cannot drift.
+  - file:
+      type: web
+      url: https://raw.githubusercontent.com/Templarian/MaterialDesign-Webfont/v7.4.47/fonts/materialdesignicons-webfont.ttf
+    id: font_mdi
+    size: 46
+    bpp: 1
+    glyphsets: []
+    glyphs:
+      - "\U000F0425" # mdi-power
+      - "\U000F035C" # mdi-menu
+      - "\U000F02DC" # mdi-home
+      - "\U000F04AB" # mdi-skip-backward
+      - "\U000F040A" # mdi-play
+      - "\U000F03E4" # mdi-pause
+      - "\U000F04AC" # mdi-skip-forward
+      - "\U000F0143" # mdi-chevron-up
+      - "\U000F0140" # mdi-chevron-down
+      - "\U000F0141" # mdi-chevron-left
+      - "\U000F0142" # mdi-chevron-right
+      - "\U000F0766" # mdi-circle-outline
+      - "\U000F075F" # mdi-volume-mute
+
 display:
   - platform: epaper_spi
     id: epaper_display
@@ -450,38 +473,38 @@ display:
 
       // Power, menu, home.
       it.rectangle(10, 82, 146, 68, black);
-      it.printf(83, 105, id(font_body), black, TextAlign::TOP_CENTER, "POWER");
+      it.printf(83, 116, id(font_mdi), black, TextAlign::CENTER, "\U000F0425");
       it.rectangle(167, 82, 146, 68, black);
-      it.printf(240, 105, id(font_body), black, TextAlign::TOP_CENTER, "MENU");
+      it.printf(240, 116, id(font_mdi), black, TextAlign::CENTER, "\U000F035C");
       it.rectangle(324, 82, 146, 68, black);
-      it.printf(397, 105, id(font_body), black, TextAlign::TOP_CENTER, "HOME");
+      it.printf(397, 116, id(font_mdi), black, TextAlign::CENTER, "\U000F02DC");
 
       // Playback.
       it.rectangle(8, 160, 110, 68, black);
-      it.printf(63, 183, id(font_small), black, TextAlign::TOP_CENTER, "SKIP-");
+      it.printf(63, 194, id(font_mdi), black, TextAlign::CENTER, "\U000F04AB");
       it.rectangle(126, 160, 110, 68, black);
-      it.printf(181, 183, id(font_small), black, TextAlign::TOP_CENTER, "PLAY");
+      it.printf(181, 194, id(font_mdi), black, TextAlign::CENTER, "\U000F040A");
       it.rectangle(244, 160, 110, 68, black);
-      it.printf(299, 183, id(font_small), black, TextAlign::TOP_CENTER, "PAUSE");
+      it.printf(299, 194, id(font_mdi), black, TextAlign::CENTER, "\U000F03E4");
       it.rectangle(362, 160, 110, 68, black);
-      it.printf(417, 183, id(font_small), black, TextAlign::TOP_CENTER, "SKIP+");
+      it.printf(417, 194, id(font_mdi), black, TextAlign::CENTER, "\U000F04AC");
 
       // D-pad.
       it.rectangle(160, 238, 160, 80, black);
-      it.printf(240, 263, id(font_heading), black, TextAlign::TOP_CENTER, "UP");
+      it.printf(240, 278, id(font_mdi), black, TextAlign::CENTER, "\U000F0143");
       it.rectangle(20, 328, 130, 90, black);
-      it.printf(85, 361, id(font_body), black, TextAlign::TOP_CENTER, "LEFT");
+      it.printf(85, 373, id(font_mdi), black, TextAlign::CENTER, "\U000F0141");
       it.filled_rectangle(170, 328, 140, 90, black);
-      it.printf(240, 358, id(font_heading), white, TextAlign::TOP_CENTER, "OK");
+      it.printf(240, 373, id(font_mdi), white, TextAlign::CENTER, "\U000F0766");
       it.rectangle(330, 328, 130, 90, black);
-      it.printf(395, 361, id(font_body), black, TextAlign::TOP_CENTER, "RIGHT");
+      it.printf(395, 373, id(font_mdi), black, TextAlign::CENTER, "\U000F0142");
       it.rectangle(160, 428, 160, 80, black);
-      it.printf(240, 453, id(font_heading), black, TextAlign::TOP_CENTER, "DOWN");
+      it.printf(240, 468, id(font_mdi), black, TextAlign::CENTER, "\U000F0140");
 
       // Volume is handled by the two physical side buttons. Keep a large
       // touchscreen mute control because there is no physical mute button.
       it.filled_rectangle(120, 540, 240, 90, black);
-      it.printf(240, 570, id(font_heading), white, TextAlign::TOP_CENTER, "MUTE");
+      it.printf(240, 585, id(font_mdi), white, TextAlign::CENTER, "\U000F075F");
 
       it.line(60, 674, w - 60, 674, black);
       it.printf(w / 2, 698, id(font_body), black, TextAlign::TOP_CENTER,
