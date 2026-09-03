@@ -6,7 +6,7 @@
 substitutions:
   device_name: basement-remote-sticky
   friendly_name: Basement Remote Sticky
-  firmware_version: "1.0.1"
+  firmware_version: "1.0.2"
 
 esphome:
   name: ${device_name}
@@ -31,14 +31,10 @@ esphome:
         - output.turn_on: pwr_hold
         - output.turn_on: pwr_lock
         - switch.turn_on: touch_power_enable
-        # The e-paper image survives deep sleep. Avoid a redundant full refresh
-        # when the AI / Power button wakes an already-rendered remote face.
-        - if:
-            condition:
-              lambda: 'return !id(woke_from_tv_off_sleep);'
-            then:
-              - delay: 1s
-              - component.update: epaper_display
+        # The sleep face survives deep sleep on e-paper. Redraw the normal
+        # remote after every cold boot or AI / Power-button wake.
+        - delay: 1s
+        - component.update: epaper_display
     - priority: -100
       then:
         - logger.log: "Basement Remote firmware ${firmware_version} ready"
@@ -282,6 +278,12 @@ globals:
     restore_value: false
     initial_value: "false"
 
+  # True only for the final e-paper refresh immediately before deep sleep.
+  - id: sleep_display_active
+    type: bool
+    restore_value: false
+    initial_value: "false"
+
   # Stored across deep sleep so an e-paper low-battery warning is refreshed
   # only when the <=20% threshold actually changes.
   - id: battery_low_displayed
@@ -347,7 +349,7 @@ script:
     mode: restart
     then:
       # Debounce transient media-player states and allow any e-paper refresh
-      # already in flight to finish before its power rail is disabled.
+      # already in flight to finish before drawing the sleep face.
       - delay: 10s
       - if:
           condition:
@@ -356,7 +358,11 @@ script:
                      id(basement_tv_state).state == "off" &&
                      !id(tv_wake_in_progress);
           then:
-            - logger.log: "Basement TV is off; entering deep sleep"
+            - logger.log: "Basement TV is off; rendering sleep face"
+            - lambda: 'id(sleep_display_active) = true;'
+            - component.update: epaper_display
+            - delay: 1s
+            - logger.log: "Sleep face rendered; entering deep sleep"
             - deep_sleep.enter: tv_power_sleep
 
   # Remote commands match the Apple TV defaults used by the working
@@ -671,6 +677,12 @@ text_sensor:
                   then:
                     - lambda: 'id(tv_wake_in_progress) = false;'
 
+font:
+  - file: "gfonts://Roboto@700"
+    id: sleep_instruction_font
+    size: 30
+    bpp: 1
+
 image:
   # Heroicons v2.2.0 solid SVGs, pinned and rasterized to 1-bit assets at
   # compile time for crisp rendering on the e-paper display.
@@ -702,6 +714,16 @@ image:
         file: https://raw.githubusercontent.com/tailwindlabs/heroicons/v2.2.0/optimized/24/solid/chevron-right.svg
       - id: icon_select
         file: https://raw.githubusercontent.com/tailwindlabs/heroicons/v2.2.0/optimized/24/solid/cursor-arrow-ripple.svg
+
+  # MDI sleep mark used only for the persistent deep-sleep face.
+  - platform: file
+    files:
+      - id: icon_sleep
+        file: https://raw.githubusercontent.com/Templarian/MaterialDesign-SVG/v7.4.47/svg/sleep.svg
+        type: BINARY
+        transparency: chroma_key
+        resize: 180x180
+
   # Streaming-service logos are rendered monochrome for the 1-bit e-paper.
   # Repo-owned launcher artwork is fetched by pinned commit because ESPHome
   # resolves relative image paths against the Device Builder wrapper, not the
@@ -738,6 +760,20 @@ display:
       const int w = it.get_width();
       const int h = it.get_height();
 
+      it.fill(white);
+      it.rectangle(0, 0, w, h, black);
+
+      // The sleep face is deliberately sparse so the persistent e-paper image
+      // clearly communicates both state and the one supported wake action.
+      if (id(sleep_display_active)) {
+        it.image(w / 2, 55, id(icon_sleep), ImageAlign::TOP_CENTER, black, white);
+        it.printf(w / 2, 270, id(sleep_instruction_font), black,
+                  TextAlign::TOP_CENTER, "PRESS AI / POWER BUTTON");
+        it.printf(w / 2, 315, id(sleep_instruction_font), black,
+                  TextAlign::TOP_CENTER, "TO WAKE");
+        return;
+      }
+
       // Small local primitives keep the static remote face dependency-free.
       // Outlined controls use a two-pixel rounded border; filled controls use
       // the same corner radius so the visual language stays consistent.
@@ -756,9 +792,6 @@ display:
         fill_rounded_rect(x + 2, y + 2, width - 4, height - 4,
                           std::max(0, radius - 2), white);
       };
-
-      it.fill(white);
-      it.rectangle(0, 0, w, h, black);
 
       // Show a tiny battery glyph only when the fuel gauge reports <=20%.
       // The screen is refreshed only when this threshold changes.
