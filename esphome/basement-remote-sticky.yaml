@@ -6,7 +6,7 @@
 substitutions:
   device_name: basement-remote-sticky
   friendly_name: Basement Remote Sticky
-  firmware_version: "0.2.13"
+  firmware_version: "0.2.14"
 
 esphome:
   name: ${device_name}
@@ -91,17 +91,23 @@ ota:
   - platform: esphome
     password: "${ota_password}"
 
-# E-paper and microSD share SCK/MOSI on Sticky. Phase 1 only uses the display.
+# E-paper and microSD share SCK/MOSI on Sticky. The remote uses the display;
+# the microSD interface is intentionally unused.
 spi:
   id: display_spi
   clk_pin: GPIO13
   mosi_pin: GPIO14
 
-# Seeed's current Sticky hardware documentation specifies touch SCL=GPIO2,
-# SDA=GPIO3. This is intentionally opposite the pin ordering in the original
-# project notes; both Seeed's docs and a known-working ESPHome Sticky config
-# agree on this assignment.
+# Sticky has two independent I2C buses: the BQ27220 fuel gauge is on GPIO0/1,
+# while the GT911 touchscreen is on GPIO2/3.
 i2c:
+  - id: sensor_i2c
+    scl:
+      number: GPIO0
+      ignore_strapping_warning: true
+    sda: GPIO1
+    frequency: 400kHz
+
   - id: touch_i2c
     scl: GPIO2
     sda:
@@ -219,6 +225,13 @@ binary_sensor:
             - script.execute: apple_tv_volume_down
             - delay: 175ms
 
+  - platform: template
+    id: battery_charging
+    name: "Battery Charging"
+    device_class: battery_charging
+    lambda: |-
+      return id(battery_current).has_state() && id(battery_current).state > 10.0f;
+
 
 globals:
   - id: touch_active
@@ -267,6 +280,13 @@ globals:
   - id: tv_wake_in_progress
     type: bool
     restore_value: false
+    initial_value: "false"
+
+  # Stored across deep sleep so an e-paper low-battery warning is refreshed
+  # only when the <=20% threshold actually changes.
+  - id: battery_low_displayed
+    type: bool
+    restore_value: true
     initial_value: "false"
 
 script:
@@ -532,6 +552,78 @@ script:
             source: Paramount+
 
 sensor:
+  # BQ27220 fuel gauge at 0x55. The standard data registers are little-endian.
+  - platform: template
+    id: battery_level
+    name: "Battery Level"
+    unit_of_measurement: "%"
+    device_class: battery
+    state_class: measurement
+    accuracy_decimals: 0
+    update_interval: 60s
+    lambda: |-
+      uint8_t reg = 0x2C;
+      uint8_t raw[2] = {0, 0};
+      auto err = id(sensor_i2c).write_readv(0x55, &reg, 1, raw, 2);
+      if (err != esphome::i2c::ERROR_OK) {
+        return NAN;
+      }
+      const uint16_t value = static_cast<uint16_t>(raw[0]) |
+                             (static_cast<uint16_t>(raw[1]) << 8);
+      if (value > 100) {
+        return NAN;
+      }
+      return static_cast<float>(value);
+    on_value:
+      then:
+        - lambda: |-
+            if (x < 0.0f || x > 100.0f) {
+              return;
+            }
+            const bool low = x <= 20.0f;
+            if (low != id(battery_low_displayed)) {
+              id(battery_low_displayed) = low;
+              id(epaper_display).update();
+            }
+
+  - platform: template
+    id: battery_voltage
+    name: "Battery Voltage"
+    unit_of_measurement: "V"
+    device_class: voltage
+    state_class: measurement
+    accuracy_decimals: 3
+    update_interval: 60s
+    lambda: |-
+      uint8_t reg = 0x08;
+      uint8_t raw[2] = {0, 0};
+      auto err = id(sensor_i2c).write_readv(0x55, &reg, 1, raw, 2);
+      if (err != esphome::i2c::ERROR_OK) {
+        return NAN;
+      }
+      const uint16_t millivolts = static_cast<uint16_t>(raw[0]) |
+                                  (static_cast<uint16_t>(raw[1]) << 8);
+      return static_cast<float>(millivolts) / 1000.0f;
+
+  - platform: template
+    id: battery_current
+    name: "Battery Current"
+    unit_of_measurement: "mA"
+    device_class: current
+    state_class: measurement
+    accuracy_decimals: 0
+    update_interval: 60s
+    lambda: |-
+      uint8_t reg = 0x0C;
+      uint8_t raw[2] = {0, 0};
+      auto err = id(sensor_i2c).write_readv(0x55, &reg, 1, raw, 2);
+      if (err != esphome::i2c::ERROR_OK) {
+        return NAN;
+      }
+      const uint16_t raw_value = static_cast<uint16_t>(raw[0]) |
+                                 (static_cast<uint16_t>(raw[1]) << 8);
+      return static_cast<float>(static_cast<int16_t>(raw_value));
+
   - platform: wifi_signal
     name: "Wi-Fi Signal"
     update_interval: 60s
@@ -667,6 +759,14 @@ display:
 
       it.fill(white);
       it.rectangle(0, 0, w, h, black);
+
+      // Show a tiny battery glyph only when the fuel gauge reports <=20%.
+      // The screen is refreshed only when this threshold changes.
+      if (id(battery_low_displayed)) {
+        it.rectangle(443, 14, 24, 12, black);
+        it.filled_rectangle(467, 17, 3, 6, black);
+        it.filled_rectangle(446, 17, 5, 6, black);
+      }
 
       // Full-height, icon-only remote face. Physical AI is the sole power
       // control, leaving the entire touchscreen for navigation and media.
