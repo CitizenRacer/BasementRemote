@@ -2,6 +2,8 @@
 
 Touchscreen TV remote firmware for the **Seeed Studio reTerminal Sticky**, backed directly by Home Assistant over ESPHome's encrypted native API.
 
+Current firmware: **v0.2.0** — complete remote control surface.
+
 ## Architecture
 
 The Sticky is intentionally another front end for the already-working Home Assistant **Basement Remote** dashboard. It does **not** introduce a second remote-control architecture and does not use the older `automation.remote_navigation_2` / `esphome.remote_button_pressed` event path as its primary control plane.
@@ -35,11 +37,14 @@ The installed `custom:universal-remote-card` is configured as Apple TV and estab
 - Power tap: Apple TV command `wakeup`
 - Power hold: Apple TV command `suspend`
 - Apps: `media_player.select_source` on `media_player.basement_apple_tv`
-- Play/pause: `media_player.media_play_pause` on `media_player.basement_apple_tv`
+- Playback: Apple TV remote commands `play`, `pause`, `skip_backward`, and `skip_forward`
 - Volume up/down: Apple TV remote commands `volume_up` / `volume_down`
 - Mute: **explicitly target `media_player.basement_sonos_arc`** because the Apple TV media player does not expose mute
+- App sources: `Netflix`, `Disney+`, `Prime Video`, `Paramount+`, `Hulu`, `HBO Max`, and `TV`
 
-When Phase 2 enables Home Assistant actions from the device, Home Assistant must be configured to **Allow the device to perform Home Assistant actions** for this ESPHome integration.
+The HBO Max launcher deliberately uses `HBO Max`, verified against this Apple TV's live `source_list`, rather than the card library's newer generic `Max` default.
+
+Home Assistant must be configured to **Allow the device to perform Home Assistant actions** for this ESPHome integration.
 
 ## Sticky hardware
 
@@ -128,7 +133,7 @@ With `ref: main`, Device Builder pulls the production source from GitHub. `refre
 
 ## Phase 1: hardware bring-up
 
-Current firmware status: **compile-validated and ready for the first hardware test**.
+Phase 1 status: **verified on the physical Sticky**. Display, touch coordinates, buttons, Wi-Fi, encrypted API, and continuous power operation are working.
 
 The canonical Phase 1 configuration passed both `esphome config` and a full `esphome compile` using **ESPHome 2026.8.2** in GitHub Actions. CI builds the firmware as an ESPHome package and also validates the production GitHub-backed Device Builder wrapper on `main`.
 
@@ -174,11 +179,34 @@ For normal Device Builder use:
 
 For repository/CI development, `.github/workflows/esphome.yml` creates a local package wrapper with dummy CI-only secrets, validates it, validates the production remote GitHub wrapper on `main`, and compiles the firmware.
 
-## Planned phases
+## Current and planned phases
 
-### Phase 2 — remote UI
+### Phase 2 — complete remote UI (current)
 
-Create a 480×800 portrait, mostly-static remote face with large touch targets for power, menu/home/back, d-pad/select, playback/skip, volume/mute, and app launchers. Touches will call the same Home Assistant actions as the working dashboard directly over the native API. GPIO5/GPIO6 are expected to become tactile volume down/up controls after button polarity is confirmed on hardware.
+Firmware v0.2.0 presents the complete 480×800 portrait remote face and calls Home Assistant directly over the encrypted native API.
+
+Implemented controls:
+
+- Power: tap sends `wakeup`; hold for at least 800 ms sends `suspend`
+- Menu and Home
+- Skip backward, Play, Pause, and Skip forward
+- Up, Down, Left, Right, and Select
+- Hold-to-repeat for D-pad and touchscreen volume controls
+- Volume down, Sonos Arc mute toggle, and volume up
+- Physical GPIO5/GPIO6 buttons as volume up/down, including hold-to-repeat
+- Netflix, Disney+, Prime Video, Paramount+, Hulu, HBO Max, and Apple TV app launchers
+- Boot completion log: `Basement Remote firmware 0.2.0 ready`
+
+The e-paper face remains static during normal use; control presses do not trigger slow display refreshes.
+
+### Phase 2 test checklist
+
+1. In Home Assistant, enable **Allow the device to perform Home Assistant actions** for the Basement Remote Sticky ESPHome integration.
+2. Install v0.2.0 from the GitHub-backed Device Builder wrapper.
+3. Confirm the boot log contains `Basement Remote firmware 0.2.0 ready`.
+4. Test Power tap and hold, Menu, Home, all four playback buttons, D-pad/Select, volume/mute, and all seven launchers.
+5. Hold each D-pad direction and each volume control to confirm repeat behavior.
+6. Test the physical volume up/down buttons with both tap and hold.
 
 ### Phase 3 — useful state
 
