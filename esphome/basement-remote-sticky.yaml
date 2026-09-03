@@ -6,7 +6,7 @@
 substitutions:
   device_name: basement-remote-sticky
   friendly_name: Basement Remote Sticky
-  firmware_version: "0.2.0"
+  firmware_version: "0.2.1"
 
 esphome:
   name: ${device_name}
@@ -210,7 +210,7 @@ globals:
     restore_value: false
     initial_value: "0"
 
-  # 0 = not repeatable; 1..7 = up/down/left/right/select/volume down/up.
+  # 0 = not repeatable; 1..5 = up/down/left/right/select.
   - id: touch_repeat_command
     type: int
     restore_value: false
@@ -551,13 +551,10 @@ display:
       it.rectangle(160, 428, 160, 80, black);
       it.printf(240, 453, id(font_heading), black, TextAlign::TOP_CENTER, "DOWN");
 
-      // Volume. Mute explicitly targets the Sonos Arc.
-      it.rectangle(10, 518, 146, 68, black);
-      it.printf(83, 541, id(font_body), black, TextAlign::TOP_CENTER, "VOL-");
+      // Volume is handled by the two physical side buttons. Keep a single
+      // touchscreen mute control because there is no physical mute button.
       it.rectangle(167, 518, 146, 68, black);
       it.printf(240, 541, id(font_body), black, TextAlign::TOP_CENTER, "MUTE");
-      it.rectangle(324, 518, 146, 68, black);
-      it.printf(397, 541, id(font_body), black, TextAlign::TOP_CENTER, "VOL+");
 
       it.printf(w / 2, 598, id(font_small), black, TextAlign::TOP_CENTER, "APPS");
 
@@ -631,12 +628,6 @@ touchscreen:
             } else if (x >= 170 && x < 310 && y >= 328 && y < 418) {
               id(touch_repeat_command) = 5;
               id(apple_tv_select).execute();
-            } else if (x >= 10 && x < 156 && y >= 518 && y < 586) {
-              id(touch_repeat_command) = 6;
-              id(apple_tv_volume_down).execute();
-            } else if (x >= 324 && x < 470 && y >= 518 && y < 586) {
-              id(touch_repeat_command) = 7;
-              id(apple_tv_volume_up).execute();
             }
     on_release:
       then:
@@ -714,8 +705,6 @@ interval:
             case 3: id(apple_tv_left).execute(); break;
             case 4: id(apple_tv_right).execute(); break;
             case 5: id(apple_tv_select).execute(); break;
-            case 6: id(apple_tv_volume_down).execute(); break;
-            case 7: id(apple_tv_volume_up).execute(); break;
             default: break;
           }
 
