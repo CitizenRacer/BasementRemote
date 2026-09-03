@@ -2,7 +2,7 @@
 
 Touchscreen TV remote firmware for the **Seeed Studio reTerminal Sticky**, backed directly by Home Assistant over ESPHome's encrypted native API.
 
-Current firmware: **v0.2.5** — icon-only, ergonomically ordered remote.
+Current firmware: **v0.2.6** — icon-only, ergonomically ordered remote.
 
 ## Architecture
 
@@ -140,6 +140,7 @@ Phase 1 intentionally keeps the device awake. It verifies components independent
 - PWR_HOLD / PWR_LOCK keep-alive behavior
 - 480×800 portrait e-paper output
 - GT911 touch and coordinate reporting
+- Portrait touch calibration: native X, mirrored Y, with no axis swap
 - Wi-Fi
 - encrypted ESPHome native API
 - ESPHome OTA
@@ -181,7 +182,7 @@ For repository/CI development, `.github/workflows/esphome.yml` creates a local p
 
 ### Phase 2 — complete remote UI (current)
 
-Firmware v0.2.5 presents a simplified 480×800 portrait remote face and calls Home Assistant directly over the encrypted native API.
+Firmware v0.2.6 presents a simplified 480×800 portrait remote face and calls Home Assistant directly over the encrypted native API. Its touch transform was calibrated on the physical device: native X maps to portrait X and native Y is mirrored, with no axis swap.
 
 Implemented controls:
 
@@ -197,7 +198,7 @@ Implemented controls:
 - Physical GPIO5/GPIO6 side buttons as volume up/down, including hold-to-repeat
 - No on-screen volume up/down controls
 - No app launchers on the Sticky screen
-- Boot completion log: `Basement Remote firmware 0.2.5 ready`
+- Boot completion log: `Basement Remote firmware 0.2.6 ready`
 
 The control hierarchy follows the common pattern documented for current Apple TV and Google TV remotes: the D-pad is the primary upper control, Back/Home are directly beneath navigation, transport controls follow, and mute sits near the physical volume controls. Power is isolated to reduce accidental activation.
 
@@ -206,8 +207,8 @@ The e-paper face remains static during normal use; control presses do not trigge
 ### Phase 2 test checklist
 
 1. In Home Assistant, enable **Allow the device to perform Home Assistant actions** for the Basement Remote Sticky ESPHome integration.
-2. Install v0.2.5 from the GitHub-backed Device Builder wrapper.
-3. Confirm the boot log contains `Basement Remote firmware 0.2.5 ready`.
+2. Install v0.2.6 from the GitHub-backed Device Builder wrapper.
+3. Confirm the boot log contains `Basement Remote firmware 0.2.6 ready`.
 4. Test Power tap and hold, Menu, Home, all four playback buttons, D-pad/Select, and mute.
 5. Hold each D-pad direction to confirm repeat behavior.
 6. Test both physical side volume buttons with tap and hold.
