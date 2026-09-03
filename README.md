@@ -2,13 +2,11 @@
 
 Touchscreen TV remote firmware for the **Seeed Studio reTerminal Sticky**, backed directly by Home Assistant over ESPHome's encrypted native API.
 
-Current firmware: **v0.2.7** — icon-only, ergonomically ordered remote.
+Current firmware: **v0.2.9** — TV-state deep sleep, physical AI-button power control, and an icon-only remote UI.
 
 ## Architecture
 
 The Sticky is intentionally another front end for the already-working Home Assistant **Basement Remote** dashboard. It does **not** introduce a second remote-control architecture and does not use the older `automation.remote_navigation_2` / `esphome.remote_button_pressed` event path as its primary control plane.
-
-Target flow:
 
 ```text
 Sticky touchscreen / physical buttons
@@ -29,20 +27,63 @@ Primary entities:
 - `remote.basement_apple_tv`
 - `media_player.basement_apple_tv`
 - `media_player.basement_sonos_arc`
-- `media_player.basement_tv` where appropriate
+- `media_player.basement_tv`
 
-The installed `custom:universal-remote-card` is configured as Apple TV and establishes these semantics:
+The installed `custom:universal-remote-card` establishes the semantics mirrored by the Sticky:
 
 - Navigation / remote keys: `remote.send_command` to `remote.basement_apple_tv`
-- Power tap: Apple TV command `wakeup`
-- Power hold: Apple TV command `suspend`
-- Apps: `media_player.select_source` on `media_player.basement_apple_tv`
-- Playback: Apple TV remote commands `play`, `pause`, `skip_backward`, and `skip_forward`
-- Volume up/down: Apple TV remote commands `volume_up` / `volume_down`
-- Mute: **explicitly target `media_player.basement_sonos_arc`** because the Apple TV media player does not expose mute
-The working dashboard also provides app launchers. Firmware v0.2.2 intentionally omits app launchers from the Sticky's simplified screen.
+- Power on: Apple TV command `wakeup`
+- Power off: Apple TV command `suspend`
+- Playback: Apple TV commands `play`, `pause`, `skip_backward`, and `skip_forward`
+- Volume up/down: Apple TV commands `volume_up` / `volume_down`
+- Mute: `media_player.volume_mute` on `media_player.basement_sonos_arc`
+- TV power-state authority: `media_player.basement_tv`
 
 Home Assistant must be configured to **Allow the device to perform Home Assistant actions** for this ESPHome integration.
+
+## Current remote behavior
+
+The 480×800 portrait face is text-free and uses pinned Heroicons v2.2.0 solid assets. There is deliberately **no on-screen power control** and no on-screen volume control.
+
+### Physical buttons
+
+- **AI / Power (GPIO4)**
+  - Short press: wake the Sticky if sleeping and send Apple TV `wakeup`.
+  - Long press (800 ms or longer): send Apple TV `suspend`.
+  - The same short/long semantics apply whether the Sticky was already awake or GPIO4 just woke it from deep sleep.
+- **Upper side button (GPIO5):** volume up, with hold-to-repeat.
+- **Lower side button (GPIO6):** volume down, with hold-to-repeat.
+
+A short AI-button press is never treated as a power toggle. If the TV is already on it simply requests `wakeup` again; it cannot accidentally turn the TV off. A long press is the explicit off gesture.
+
+### Touchscreen
+
+- D-pad: Up, Down, Left, Right
+- Select: filled center button using Heroicons `cursor-arrow-ripple`
+- Back: Heroicons `arrow-uturn-left`
+- Home
+- Skip backward
+- Play
+- Pause
+- Skip forward
+- Mute
+
+The D-pad supports hold-to-repeat. Mute is white when the Sonos Arc is unmuted and inverts to black when muted. App launchers are intentionally omitted.
+
+## TV-state sleep policy
+
+Battery life is tied to the actual LG TV state rather than an idle timer:
+
+- When `media_player.basement_tv` is confirmed **on**, the Sticky remains fully awake and responsive.
+- When `media_player.basement_tv` is confirmed **off**, the Sticky waits briefly for state/display activity to settle and enters ESP32 deep sleep.
+- `unknown` and `unavailable` are treated fail-safe: the Sticky stays awake instead of sleeping on an uncertain TV state.
+- GPIO4 (AI / Power) is the only deep-sleep wake source.
+- Touch power and the e-paper power rail are shut down before deep sleep; the e-paper image itself remains visible without continuous refresh power.
+- On wake, the physical press is timed through button release before deciding whether it was a short ON press or a long OFF press.
+
+### Deep-sleep limitation
+
+While the ESP32 is in deep sleep, Wi-Fi and the Home Assistant API are off. Therefore, if the TV is turned on by some other remote while the Sticky is already sleeping, Home Assistant cannot wake the Sticky over the network. Press the Sticky's AI / Power button to wake it. This is intentional because keeping networking alive would give up most of the battery savings of deep sleep.
 
 ## Sticky hardware
 
@@ -51,8 +92,8 @@ Home Assistant must be configured to **Allow the device to perform Home Assistan
 | PWR_HOLD | 45 |
 | PWR_LOCK | 46 |
 | AI / Power button | 4 |
-| Up button | 5 |
-| Down button | 6 |
+| Volume Up button | 5 |
+| Volume Down button | 6 |
 | E-paper SCK | 13 |
 | E-paper MOSI / SDI | 14 |
 | E-paper CS | 15 |
@@ -75,28 +116,18 @@ The ESP32-S3 has 32 MB flash and 8 MB octal PSRAM. ESPHome's integrated display 
 ```text
 esphome/
   basement-remote-sticky.yaml          # Canonical GitHub-hosted ESPHome package
-  device-builder-wrapper.example.yaml  # Example of the tiny local Device Builder config
+  device-builder-wrapper.example.yaml  # Tiny local Device Builder config example
   secrets.example.yaml                 # Secret key names only; no credentials
 README.md
 ```
 
-`esphome/basement-remote-sticky.yaml` is the source of truth. The Device Builder configuration should remain a small local wrapper that resolves secrets and imports that file directly from the repository's `main` branch.
+`esphome/basement-remote-sticky.yaml` is the source of truth. Device Builder should remain a small local wrapper that resolves secrets and imports that file directly from the repository's `main` branch.
 
 ## ESPHome Device Builder
 
-This project follows the same Git-backed package pattern as the Garage Door Keypad project. Do not copy the full firmware into Device Builder.
+Do not copy the full firmware into Device Builder.
 
-### Create the Device Builder entry
-
-1. Open **ESPHome Device Builder** in Home Assistant.
-2. Click **Create device**.
-3. Choose **Empty Configuration**.
-4. Name the device **Basement Remote Sticky**; use `basement-remote-sticky.yaml` as the local filename when applicable.
-5. Open the YAML editor and replace the generated content with the contents of [`esphome/device-builder-wrapper.example.yaml`](esphome/device-builder-wrapper.example.yaml).
-6. Ensure the required keys exist in Device Builder's local `secrets.yaml`.
-7. Validate the configuration. The wrapper will fetch the production firmware from GitHub `main`.
-
-The checked-in wrapper is:
+Create an **Empty Configuration** named **Basement Remote Sticky**, then use the checked-in wrapper:
 
 ```yaml
 substitutions:
@@ -115,111 +146,43 @@ packages:
     refresh: 60s
 ```
 
-ESPHome's remote-package mechanism does not allow the Git-hosted package itself to resolve `!secret` values. The local wrapper therefore reads Device Builder's `secrets.yaml` and supplies those values as substitutions. All non-secret firmware logic remains in GitHub.
+The required local secret names are documented in `esphome/secrets.example.yaml`. The actual API encryption key belongs only in Home Assistant's local ESPHome `secrets.yaml`; never commit it to this repository.
 
-### Local secrets
+With `ref: main`, Device Builder pulls the production source from GitHub. `refresh: 60s` controls ESPHome's package-cache refresh during validation/build activity; it does not automatically flash the device when GitHub changes.
 
-The wrapper intentionally uses the same shared `wifi_ssid`, `wifi_password`, `fallback_ap_password`, and `ota_password` secret names as the Garage Door Keypad wrapper. On a Device Builder already configured for that project, the only new secret required for Basement Remote is:
-
-```yaml
-basement_remote_api_encryption_key: "YOUR_32_BYTE_BASE64_API_KEY"
-```
-
-The real generated API encryption key belongs **only** in Home Assistant's local ESPHome `secrets.yaml`. Never commit the actual key to this repository. `esphome/secrets.example.yaml` documents the expected secret names without containing credentials.
-
-With `ref: main`, Device Builder pulls the production source from GitHub. `refresh: 60s` means ESPHome may refresh its cached repository copy when validation/build activity occurs after that interval; it does not automatically flash the device when GitHub changes.
-
-## Phase 1: hardware bring-up
-
-Phase 1 status: **verified on the physical Sticky**. Display, touch coordinates, buttons, Wi-Fi, encrypted API, and continuous power operation are working.
-
-The canonical Phase 1 configuration passed both `esphome config` and a full `esphome compile` using **ESPHome 2026.8.2** in GitHub Actions. CI builds the firmware as an ESPHome package and also validates the production GitHub-backed Device Builder wrapper on `main`.
-
-Phase 1 intentionally keeps the device awake. It verifies components independently before remote-control behavior or deep sleep is introduced:
-
-- PWR_HOLD / PWR_LOCK keep-alive behavior
-- 480×800 portrait e-paper output
-- GT911 touch and coordinate reporting
-- Portrait touch calibration: native X, mirrored Y, with no axis swap
-- Wi-Fi
-- encrypted ESPHome native API
-- ESPHome OTA
-- GPIO4 / GPIO5 / GPIO6 physical buttons
-- diagnostics (Wi-Fi signal, uptime, IP, last touch coordinates)
-
-The e-paper uses `update_interval: never`; it renders once at boot and only refreshes on explicit request. Touch and button activity therefore does **not** cause an e-paper refresh.
-
-Battery reporting is deferred from the first bring-up image. Sticky uses a BQ27220 fuel gauge on the system I²C bus, but ESPHome does not currently provide a first-party BQ27220 sensor component. Adding an external component is not justified until the core hardware is proven.
-
-### First hardware-test checklist
-
-After flashing Phase 1, verify these in order:
-
-1. The Sticky stays powered continuously rather than shutting itself off.
-2. The e-paper shows the `BASEMENT REMOTE / PHASE 1` portrait test screen.
-3. The device joins Wi-Fi and appears online in ESPHome / Home Assistant.
-4. Touching all four regions produces sensible portrait `Last Touch X` / `Last Touch Y` coordinates.
-5. GPIO4, GPIO5, and GPIO6 each change their corresponding binary sensor and produce the expected log message.
-6. The diagnostic `Refresh E-Paper` button performs an explicit display refresh.
-7. OTA remains reachable after the initial USB flash.
-
-Do **not** evaluate deep sleep in this phase; it is intentionally absent.
-
-## Building
+## Build and validation
 
 This project targets **ESPHome 2026.8.2 or newer**.
 
-For normal Device Builder use:
+GitHub Actions:
 
-1. Ensure Device Builder's local `secrets.yaml` contains the shared Wi-Fi/fallback/OTA keys plus `basement_remote_api_encryption_key`; see `esphome/secrets.example.yaml` for the expected names.
-2. Create a new Device Builder configuration using the contents of `esphome/device-builder-wrapper.example.yaml`.
-3. Validate or install from that local wrapper. ESPHome fetches `esphome/basement-remote-sticky.yaml` from GitHub `main`.
-4. Future firmware changes are made and reviewed in GitHub. Device Builder remains only the secret-bearing import wrapper.
+1. Installs ESPHome 2026.8.2.
+2. Creates CI-only dummy secrets.
+3. Builds a local package wrapper.
+4. Runs `esphome config` validation.
+5. Validates the production GitHub-backed wrapper on `main`.
+6. Runs a full firmware compile.
 
-For repository/CI development, `.github/workflows/esphome.yml` creates a local package wrapper with dummy CI-only secrets, validates it, validates the production remote GitHub wrapper on `main`, and compiles the firmware.
+Normal deployment flow:
 
-## Current and planned phases
+1. Change firmware in GitHub.
+2. Allow CI validation and compilation to pass.
+3. Merge to `main`.
+4. In ESPHome Device Builder, validate/install the small local wrapper.
+5. Confirm the boot log contains `Basement Remote firmware 0.2.9 ready`.
 
-### Phase 2 — complete remote UI (current)
+## v0.2.9 test checklist
 
-Firmware v0.2.7 presents a simplified 480×800 portrait remote face and calls Home Assistant directly over the encrypted native API. Its touch transform was calibrated on the physical device: native X maps to portrait X and native Y is mirrored, with no axis swap.
-
-Implemented controls:
-
-- A completely text-free screen using pinned Heroicons SVG assets and rounded control boxes
-- Isolated Power control in the upper-right
-- A dominant D-pad at the top, followed by Back/Home, playback, and mute
-- Power: tap sends `wakeup`; hold for at least 800 ms sends `suspend`
-- Menu and Home
-- Skip backward, Play, Pause, and Skip forward
-- Up, Down, Left, Right, and Select
-- Hold-to-repeat for the touchscreen D-pad
-- Large touchscreen Sonos Arc mute toggle whose face is white when unmuted and black when muted
-- Physical GPIO5/GPIO6 side buttons as volume up/down, including hold-to-repeat
-- No on-screen volume up/down controls
-- No app launchers on the Sticky screen
-- Boot completion log: `Basement Remote firmware 0.2.6 ready`
-
-The control hierarchy follows the common pattern documented for current Apple TV and Google TV remotes: the D-pad is the primary upper control, Back/Home are directly beneath navigation, transport controls follow, and mute sits near the physical volume controls. Power is isolated to reduce accidental activation.
-
-Navigation, playback, and volume presses do not trigger slow display refreshes. A change to the Sonos Arc `is_volume_muted` attribute triggers one refresh so the Mute button remains accurate even when mute changes elsewhere. Button artwork comes from [Heroicons](https://heroicons.com/) v2.2.0. The firmware pins the official release, downloads only the required solid SVGs at compile time, and rasterizes them into 1-bit assets for the e-paper display.
-
-### Phase 2 test checklist
-
-1. In Home Assistant, enable **Allow the device to perform Home Assistant actions** for the Basement Remote Sticky ESPHome integration.
-2. Install v0.2.7 from the GitHub-backed Device Builder wrapper.
-3. Confirm the boot log contains `Basement Remote firmware 0.2.6 ready`.
-4. Test Power tap and hold, Menu, Home, all four playback buttons, D-pad/Select, and mute.
-5. Hold each D-pad direction to confirm repeat behavior.
-6. Test both physical side volume buttons with tap and hold.
-
-### Phase 3 — useful state
-
-Add low-refresh state such as Apple TV state, active app/source, current title where useful, battery, and connectivity. State changes will be debounced so e-paper refreshes stay infrequent.
-
-### Phase 4 — battery optimization
-
-Only after normal operation is reliable: add a session-based sleep policy. Recently used / TV-on sessions stay awake; idle / TV-off sessions may sleep. GPIO4 is the initial deep-sleep wake candidate. Touch wake is not assumed.
+1. With the TV on, confirm the Sticky remains awake indefinitely.
+2. Short-press the AI / Power button while the TV is on; verify the TV stays on.
+3. Long-press AI / Power for at least 800 ms; verify Apple TV suspends and the LG TV turns off.
+4. Confirm the Sticky subsequently disappears from Wi-Fi / Home Assistant as it enters deep sleep.
+5. Short-press AI / Power while asleep; verify the Sticky wakes, reconnects to Home Assistant, and turns the Apple TV / TV on.
+6. Confirm the remote stays awake after the LG state reports on.
+7. Turn the TV off by another control path; confirm the Sticky enters deep sleep after the TV state is confirmed off.
+8. Verify all touchscreen controls after the layout shift, especially the D-pad hit regions.
+9. Verify the center Select control uses `cursor-arrow-ripple` and still sends Apple TV `select`.
+10. Verify physical side-volume tap/hold and Sonos mute state/appearance.
 
 ## Safety / development policy
 
@@ -227,5 +190,4 @@ Only after normal operation is reliable: add a session-based sleep policy. Recen
 - Device Builder contains only the small package wrapper and local secrets; do not maintain a second full firmware copy there.
 - Do not commit credentials or the actual ESPHome API encryption key.
 - Do not modify the working Home Assistant Basement Remote dashboard unless a proven requirement emerges.
-- Do not introduce deep sleep until the remote is stable.
-- Do not flash the Sticky until the firmware has passed configuration validation and compilation.
+- Do not flash firmware that has not passed configuration validation and compilation.
