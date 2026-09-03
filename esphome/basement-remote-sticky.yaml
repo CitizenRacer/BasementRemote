@@ -138,6 +138,7 @@ binary_sensor:
     name: "AI Power Button"
     pin:
       number: GPIO4
+      allow_other_uses: true
       mode:
         input: true
         pullup: true
