@@ -6,7 +6,7 @@
 substitutions:
   device_name: basement-remote-sticky
   friendly_name: Basement Remote Sticky
-  firmware_version: "0.2.9"
+  firmware_version: "0.2.10"
 
 esphome:
   name: ${device_name}
@@ -219,23 +219,6 @@ binary_sensor:
             - script.execute: apple_tv_volume_down
             - delay: 175ms
 
-  # Import the Sonos Arc mute attribute so the physical e-paper face reflects
-  # the actual audio state even when mute changes somewhere else.
-  - platform: homeassistant
-    id: sonos_muted
-    internal: true
-    entity_id: media_player.basement_sonos_arc
-    attribute: is_volume_muted
-    on_state:
-      then:
-        - if:
-            condition:
-              lambda: |-
-                const int new_state = x ? 1 : 0;
-                return new_state != id(displayed_mute_state);
-            then:
-              - component.update: epaper_display
-
 
 globals:
   - id: touch_active
@@ -285,13 +268,6 @@ globals:
     type: bool
     restore_value: false
     initial_value: "false"
-
-  # Retain the last rendered mute face so a deep-sleep wake does not cause an
-  # unnecessary full e-paper refresh when the Sonos state is unchanged.
-  - id: displayed_mute_state
-    type: int
-    restore_value: true
-    initial_value: "-1"
 
 script:
   - id: wake_tv_after_power_button
@@ -515,18 +491,45 @@ script:
             entity_id: remote.basement_apple_tv
             command: volume_up
 
-  - id: sonos_toggle_mute
+  - id: apple_tv_launch_hulu
     mode: restart
     then:
-      - logger.log: "Sonos Arc command: toggle mute"
+      - logger.log: "Apple TV app: Hulu"
       - homeassistant.action:
-          action: media_player.volume_mute
+          action: media_player.select_source
           data:
-            entity_id: media_player.basement_sonos_arc
-          data_template:
-            is_volume_muted: >-
-              {{ not state_attr('media_player.basement_sonos_arc',
-                                'is_volume_muted') }}
+            entity_id: media_player.basement_apple_tv
+            source: Hulu
+
+  - id: apple_tv_launch_hbo_max
+    mode: restart
+    then:
+      - logger.log: "Apple TV app: HBO Max"
+      - homeassistant.action:
+          action: media_player.select_source
+          data:
+            entity_id: media_player.basement_apple_tv
+            source: HBO Max
+
+  - id: apple_tv_launch_disney_plus
+    mode: restart
+    then:
+      - logger.log: "Apple TV app: Disney+"
+      - homeassistant.action:
+          action: media_player.select_source
+          data:
+            entity_id: media_player.basement_apple_tv
+            source: Disney+
+
+  - id: apple_tv_launch_paramount_plus
+    mode: restart
+    then:
+      - logger.log: "Apple TV app: Paramount+"
+      - homeassistant.action:
+          action: media_player.select_source
+          data:
+            entity_id: media_player.basement_apple_tv
+            source: Paramount+
 
 sensor:
   - platform: wifi_signal
@@ -607,8 +610,24 @@ image:
         file: https://raw.githubusercontent.com/tailwindlabs/heroicons/v2.2.0/optimized/24/solid/chevron-right.svg
       - id: icon_select
         file: https://raw.githubusercontent.com/tailwindlabs/heroicons/v2.2.0/optimized/24/solid/cursor-arrow-ripple.svg
-      - id: icon_mute
-        file: https://raw.githubusercontent.com/tailwindlabs/heroicons/v2.2.0/optimized/24/solid/speaker-x-mark.svg
+  # Streaming-service logos are rendered monochrome for the 1-bit e-paper.
+  - platform: file
+    defaults:
+      type: BINARY
+      transparency: chroma_key
+    files:
+      - id: logo_hulu
+        file: https://upload.wikimedia.org/wikipedia/commons/f/f9/Hulu_logo_%282018%29.svg
+        resize: 90x30
+      - id: logo_hbo_max
+        file: https://upload.wikimedia.org/wikipedia/commons/b/b3/HBO_Max_%282025%29.svg
+        resize: 72x52
+      - id: logo_disney_plus
+        file: https://upload.wikimedia.org/wikipedia/commons/3/3e/Disney%2B_logo.svg
+        resize: 82x44
+      - id: logo_paramount_plus
+        file: https://upload.wikimedia.org/wikipedia/commons/4/4e/Paramount%2B_logo.svg
+        resize: 92x28
 display:
   - platform: epaper_spi
     id: epaper_display
@@ -651,11 +670,12 @@ display:
       // Primary navigation: largest and highest controls on the face.
       rounded_rect(150, 30, 180, 90, 14);
       it.image(240, 75, id(icon_up), ImageAlign::CENTER, black, white);
-      rounded_rect(30, 135, 120, 110, 14);
+      // Left/right are the same 180x90 control as up/down, rotated 90 deg.
+      rounded_rect(45, 100, 90, 180, 14);
       it.image(90, 190, id(icon_left), ImageAlign::CENTER, black, white);
       fill_rounded_rect(170, 135, 140, 110, 14, black);
       it.image(240, 190, id(icon_select), ImageAlign::CENTER, white, black);
-      rounded_rect(330, 135, 120, 110, 14);
+      rounded_rect(345, 100, 90, 180, 14);
       it.image(390, 190, id(icon_right), ImageAlign::CENTER, black, white);
       rounded_rect(150, 260, 180, 90, 14);
       it.image(240, 305, id(icon_down), ImageAlign::CENTER, black, white);
@@ -676,17 +696,16 @@ display:
       rounded_rect(362, 515, 110, 90, 14);
       it.image(417, 560, id(icon_skip_forward), ImageAlign::CENTER, black, white);
 
-      // Volume is handled by the two physical side buttons. Mute is white
-      // while sound is active and inverts to black when the Sonos Arc is muted.
-      const bool muted = id(sonos_muted).has_state() && id(sonos_muted).state;
-      id(displayed_mute_state) = muted ? 1 : 0;
-      if (muted) {
-        fill_rounded_rect(160, 665, 160, 100, 14, black);
-        it.image(240, 715, id(icon_mute), ImageAlign::CENTER, white, black);
-      } else {
-        rounded_rect(160, 665, 160, 100, 14);
-        it.image(240, 715, id(icon_mute), ImageAlign::CENTER, black, white);
-      }
+      // Volume remains on the physical side buttons. The bottom row is
+      // dedicated to one-touch Apple TV streaming-service launchers.
+      rounded_rect(8, 665, 110, 100, 14);
+      it.image(63, 715, id(logo_hulu), ImageAlign::CENTER, black, white);
+      rounded_rect(126, 665, 110, 100, 14);
+      it.image(181, 715, id(logo_hbo_max), ImageAlign::CENTER, black, white);
+      rounded_rect(244, 665, 110, 100, 14);
+      it.image(299, 715, id(logo_disney_plus), ImageAlign::CENTER, black, white);
+      rounded_rect(362, 665, 110, 100, 14);
+      it.image(417, 715, id(logo_paramount_plus), ImageAlign::CENTER, black, white);
 
 touchscreen:
   - platform: gt911
@@ -731,10 +750,10 @@ touchscreen:
             } else if (x >= 150 && x < 330 && y >= 260 && y < 350) {
               id(touch_repeat_command) = 2;
               id(apple_tv_down).execute();
-            } else if (x >= 30 && x < 150 && y >= 135 && y < 245) {
+            } else if (x >= 45 && x < 135 && y >= 100 && y < 280) {
               id(touch_repeat_command) = 3;
               id(apple_tv_left).execute();
-            } else if (x >= 330 && x < 450 && y >= 135 && y < 245) {
+            } else if (x >= 345 && x < 435 && y >= 100 && y < 280) {
               id(touch_repeat_command) = 4;
               id(apple_tv_right).execute();
             } else if (x >= 170 && x < 310 && y >= 135 && y < 245) {
@@ -765,8 +784,14 @@ touchscreen:
                 id(apple_tv_pause).execute();
               } else if (x >= 362 && x < 472 && y >= 515 && y < 605) {
                 id(apple_tv_skip_forward).execute();
-              } else if (x >= 160 && x < 320 && y >= 665 && y < 765) {
-                id(sonos_toggle_mute).execute();
+              } else if (x >= 8 && x < 118 && y >= 665 && y < 765) {
+                id(apple_tv_launch_hulu).execute();
+              } else if (x >= 126 && x < 236 && y >= 665 && y < 765) {
+                id(apple_tv_launch_hbo_max).execute();
+              } else if (x >= 244 && x < 354 && y >= 665 && y < 765) {
+                id(apple_tv_launch_disney_plus).execute();
+              } else if (x >= 362 && x < 472 && y >= 665 && y < 765) {
+                id(apple_tv_launch_paramount_plus).execute();
               } else {
                 ESP_LOGD("touch", "Touch was outside a control");
               }
