@@ -2,7 +2,7 @@
 
 Touchscreen TV remote firmware for the **Seeed Studio reTerminal Sticky**, backed directly by Home Assistant over ESPHome's encrypted native API.
 
-Current firmware: **v0.2.3** — icon-based physical-button remote.
+Current firmware: **v0.2.5** — icon-only, ergonomically ordered remote.
 
 ## Architecture
 
@@ -181,11 +181,13 @@ For repository/CI development, `.github/workflows/esphome.yml` creates a local p
 
 ### Phase 2 — complete remote UI (current)
 
-Firmware v0.2.3 presents a simplified 480×800 portrait remote face and calls Home Assistant directly over the encrypted native API.
+Firmware v0.2.5 presents a simplified 480×800 portrait remote face and calls Home Assistant directly over the encrypted native API.
 
 Implemented controls:
 
-- Material Design Icons replace text labels on every touchscreen control
+- A completely text-free screen using Material Design Icons
+- Isolated Power control in the upper-right
+- A dominant D-pad at the top, followed by Back/Home, playback, and mute
 - Power: tap sends `wakeup`; hold for at least 800 ms sends `suspend`
 - Menu and Home
 - Skip backward, Play, Pause, and Skip forward
@@ -195,15 +197,17 @@ Implemented controls:
 - Physical GPIO5/GPIO6 side buttons as volume up/down, including hold-to-repeat
 - No on-screen volume up/down controls
 - No app launchers on the Sticky screen
-- Boot completion log: `Basement Remote firmware 0.2.3 ready`
+- Boot completion log: `Basement Remote firmware 0.2.5 ready`
+
+The control hierarchy follows the common pattern documented for current Apple TV and Google TV remotes: the D-pad is the primary upper control, Back/Home are directly beneath navigation, transport controls follow, and mute sits near the physical volume controls. Power is isolated to reduce accidental activation.
 
 The e-paper face remains static during normal use; control presses do not trigger slow display refreshes. Button glyphs come from [Material Design Icons](https://pictogrammers.com/library/mdi/) v7.4.47. The firmware pins that exact webfont release and includes only the required glyphs.
 
 ### Phase 2 test checklist
 
 1. In Home Assistant, enable **Allow the device to perform Home Assistant actions** for the Basement Remote Sticky ESPHome integration.
-2. Install v0.2.3 from the GitHub-backed Device Builder wrapper.
-3. Confirm the boot log contains `Basement Remote firmware 0.2.3 ready`.
+2. Install v0.2.5 from the GitHub-backed Device Builder wrapper.
+3. Confirm the boot log contains `Basement Remote firmware 0.2.5 ready`.
 4. Test Power tap and hold, Menu, Home, all four playback buttons, D-pad/Select, and mute.
 5. Hold each D-pad direction to confirm repeat behavior.
 6. Test both physical side volume buttons with tap and hold.
