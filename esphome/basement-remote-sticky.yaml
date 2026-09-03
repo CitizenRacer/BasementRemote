@@ -6,7 +6,7 @@
 substitutions:
   device_name: basement-remote-sticky
   friendly_name: Basement Remote Sticky
-  firmware_version: "1.0"
+  firmware_version: "1.0.1"
 
 esphome:
   name: ${device_name}
@@ -730,7 +730,7 @@ display:
     model: Seeed-reTerminal-Sticky
     spi_id: display_spi
     rotation: 90
-    update_interval: never
+    update_interval: 10min
     full_update_every: 1
     lambda: |-
       const auto black = Color(0, 0, 0);
