@@ -6,7 +6,7 @@
 substitutions:
   device_name: basement-remote-sticky
   friendly_name: Basement Remote Sticky
-  firmware_version: "1.0.7"
+  firmware_version: "1.0.8"
 
 esphome:
   name: ${device_name}
@@ -739,10 +739,9 @@ image:
   - platform: file
     files:
       - id: sleep_screen_art
-        # Pin this sleep asset to the commit that introduced the v1.0.5 artwork.
-        # The immutable URL also busts ESPHome's external-file cache so a device
-        # cannot silently reuse the older sleep screen after an OTA update.
-        file: https://raw.githubusercontent.com/CitizenRacer/BasementRemote/06855261ccd2b3b9c88b3112ed5227b7a4cc0456/assets/sleep-screen.svg
+        # Pin the vector-only sleep artwork so builds cannot reuse an older
+        # cached asset that still contains live SVG text elements.
+        file: https://raw.githubusercontent.com/CitizenRacer/BasementRemote/1aaf4d8b8ba0dd5c8ddf28dacdb67f34c62b3fc2/assets/sleep-screen.svg
         type: BINARY
         transparency: chroma_key
         resize: 480x800
@@ -793,8 +792,8 @@ display:
       it.rectangle(0, 0, w, h, black);
 
       // The approved 480x800 sleep artwork is a single deterministic 1-bit
-      // asset: moon/Z icon, Sleeping label, wake instruction, and two-loop
-      // arrow aimed at the physical AI / Power button at ~14% screen height.
+      // asset: moon/Z icon, outlined Sleeping label, outlined wake instruction,
+      // and two-loop arrow aimed at the physical AI / Power button at ~14%.
       if (id(sleep_display_active)) {
         it.image(0, 0, id(sleep_screen_art), ImageAlign::TOP_LEFT, black, white);
         return;
