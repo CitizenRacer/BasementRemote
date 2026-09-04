@@ -6,7 +6,7 @@
 substitutions:
   device_name: basement-remote-sticky
   friendly_name: Basement Remote Sticky
-  firmware_version: "1.0.5"
+  firmware_version: "1.0.6"
 
 esphome:
   name: ${device_name}
@@ -284,6 +284,12 @@ globals:
     restore_value: false
     initial_value: "false"
 
+  # True only for the full-white cleaning refresh that precedes the sleep face.
+  - id: sleep_clear_active
+    type: bool
+    restore_value: false
+    initial_value: "false"
+
   # Stored across deep sleep so an e-paper low-battery warning is refreshed
   # only when the <=20% threshold actually changes.
   - id: battery_low_displayed
@@ -364,10 +370,23 @@ script:
   - id: render_sleep_and_enter
     mode: restart
     then:
-      - logger.log: "Rendering approved sleep face"
-      - lambda: 'id(sleep_display_active) = true;'
+      # E-paper refreshes are asynchronous. First drive every pixel white and
+      # leave enough time for the SSD1677 waveform to finish before drawing the
+      # sleep face. This removes the previous remote image instead of layering
+      # the sleep artwork over residual charge from the awake screen.
+      - logger.log: "Clearing e-paper before sleep"
+      - lambda: |-
+          id(sleep_display_active) = false;
+          id(sleep_clear_active) = true;
       - component.update: epaper_display
-      - delay: 1s
+      - delay: 10s
+      - logger.log: "Rendering approved sleep face"
+      - lambda: |-
+          id(sleep_clear_active) = false;
+          id(sleep_display_active) = true;
+      - component.update: epaper_display
+      # Do not cut display power while the asynchronous full refresh is active.
+      - delay: 10s
       - logger.log: "Sleep face rendered; entering deep sleep"
       - deep_sleep.enter: tv_power_sleep
 
@@ -725,7 +744,6 @@ image:
         # cannot silently reuse the older sleep screen after an OTA update.
         file: https://raw.githubusercontent.com/CitizenRacer/BasementRemote/06855261ccd2b3b9c88b3112ed5227b7a4cc0456/assets/sleep-screen.svg
         type: BINARY
-        transparency: chroma_key
         resize: 480x800
 
   # Streaming-service logos are also repo-owned so an upstream logo host or
@@ -763,6 +781,14 @@ display:
       const int h = it.get_height();
 
       it.fill(white);
+
+      // The first sleep transition refresh is intentionally completely blank.
+      // Returning before the border is drawn ensures every pixel is driven to
+      // white before the final sleep artwork is applied.
+      if (id(sleep_clear_active)) {
+        return;
+      }
+
       it.rectangle(0, 0, w, h, black);
 
       // The approved 480x800 sleep artwork is a single deterministic 1-bit
