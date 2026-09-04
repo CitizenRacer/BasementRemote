@@ -6,7 +6,7 @@
 substitutions:
   device_name: basement-remote-sticky
   friendly_name: Basement Remote Sticky
-  firmware_version: "1.0.4"
+  firmware_version: "1.0.5"
 
 esphome:
   name: ${device_name}
@@ -720,7 +720,10 @@ image:
   - platform: file
     files:
       - id: sleep_screen_art
-        file: https://raw.githubusercontent.com/CitizenRacer/BasementRemote/main/assets/sleep-screen.svg
+        # Pin this sleep asset to the commit that introduced the v1.0.5 artwork.
+        # The immutable URL also busts ESPHome's external-file cache so a device
+        # cannot silently reuse the older sleep screen after an OTA update.
+        file: https://raw.githubusercontent.com/CitizenRacer/BasementRemote/06855261ccd2b3b9c88b3112ed5227b7a4cc0456/assets/sleep-screen.svg
         type: BINARY
         transparency: chroma_key
         resize: 480x800
