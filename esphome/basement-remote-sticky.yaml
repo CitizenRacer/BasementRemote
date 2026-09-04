@@ -6,7 +6,7 @@
 substitutions:
   device_name: basement-remote-sticky
   friendly_name: Basement Remote Sticky
-  firmware_version: "1.0.12"
+  firmware_version: "1.0.13"
 
 esphome:
   name: ${device_name}
@@ -31,8 +31,9 @@ esphome:
         - output.turn_on: pwr_hold
         - output.turn_on: pwr_lock
         - switch.turn_on: touch_power_enable
-        # The sleep face survives deep sleep on e-paper. Redraw the normal
-        # remote immediately after every cold boot or AI / Power-button wake.
+        # Yield briefly so the GT911 can complete its reset/init sequence before
+        # the full e-paper refresh occupies startup. This replaces the old 1s wait.
+        - delay: 100ms
         - component.update: epaper_display
     - priority: -100
       then:
