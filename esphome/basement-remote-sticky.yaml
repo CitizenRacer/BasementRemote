@@ -6,7 +6,7 @@
 substitutions:
   device_name: basement-remote-sticky
   friendly_name: Basement Remote Sticky
-  firmware_version: "1.0.11"
+  firmware_version: "1.0.12"
 
 esphome:
   name: ${device_name}
@@ -32,8 +32,7 @@ esphome:
         - output.turn_on: pwr_lock
         - switch.turn_on: touch_power_enable
         # The sleep face survives deep sleep on e-paper. Redraw the normal
-        # remote after every cold boot or AI / Power-button wake.
-        - delay: 1s
+        # remote immediately after every cold boot or AI / Power-button wake.
         - component.update: epaper_display
     - priority: -100
       then:
