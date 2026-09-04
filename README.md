@@ -2,7 +2,7 @@
 
 Touchscreen TV remote firmware for the **Seeed Studio reTerminal Sticky**, backed directly by Home Assistant over ESPHome's encrypted native API.
 
-Current firmware on `main`: **v1.0.2**. The authoritative version is the `firmware_version` substitution in [`esphome/basement-remote-sticky.yaml`](esphome/basement-remote-sticky.yaml).
+Current firmware on `main`: **v1.0.3**. The authoritative version is the `firmware_version` substitution in [`esphome/basement-remote-sticky.yaml`](esphome/basement-remote-sticky.yaml).
 
 <p align="center">
   <img src="docs/remote.jpg" alt="Seeed Studio reTerminal Sticky running the Basement Remote interface" width="420">
@@ -30,9 +30,11 @@ The firmware directly depends on:
 
 - `remote.basement_apple_tv` — navigation, transport, power, and volume commands
 - `media_player.basement_apple_tv` — streaming-service app launchers via `media_player.select_source`
-- `media_player.basement_tv` — authoritative TV power state for the remote's deep-sleep lifecycle
+- `media_player.basement_tv` — authoritative TV power state for the remote's automatic deep-sleep lifecycle
 
 For the ESPHome integration, Home Assistant must have **Allow the device to perform Home Assistant actions** enabled.
+
+ESPHome exposes a native Home Assistant **Sleep Remote** button. Pressing it forces the Sticky to render the sleep face and enter deep sleep immediately, regardless of the TV's current state. As expected for a deep-sleep device, that button becomes unavailable while the Sticky is asleep and returns after the AI / Power button wakes it.
 
 ## Controls
 
@@ -50,6 +52,7 @@ For the ESPHome integration, Home Assistant must have **Allow the device to perf
 | HBO Max launcher | Select Apple TV source `HBO Max` |
 | Disney+ launcher | Select Apple TV source `Disney+` |
 | Paramount+ launcher | Select Apple TV source `Paramount+` |
+| Home Assistant **Sleep Remote** button | Render the sleep face and enter deep sleep immediately |
 
 The D-pad and both physical volume buttons support hold-to-repeat. They fire immediately, begin repeating after 500 ms, and repeat every 175 ms while held.
 
@@ -66,15 +69,17 @@ The remote uses the Sticky's 480×800 portrait e-paper display with a static, ic
 
 The up/down D-pad controls are 180×90. Left/right use the same dimensions rotated 90 degrees, so they are 90×180.
 
-Awake control icons use pinned **Heroicons v2.2.0** solid SVGs. Disney+ and Paramount+ artwork is stored in this repository under [`assets/`](assets/) and referenced by commit-pinned raw GitHub URLs so ESPHome can resolve them from the Device Builder package context. Hulu and HBO Max use external SVG sources at compile time.
+All UI artwork used by the firmware is now stored under [`assets/`](assets/). The awake controls use vendored **Heroicons v2.2.0** solid SVGs. Hulu, HBO Max, Disney+, and Paramount+ launcher artwork is also repository-owned. The previous external Heroicons, Material Design Icons, Wikimedia, Google Fonts, and commit-pinned launcher fetches have been removed from the firmware configuration.
 
-Immediately before deep sleep, the firmware replaces the normal remote face with a dedicated sleep face. It shows a large, horizontally centered **Material Design Icons `mdi:sleep`** mark near the top of the screen and the centered instruction **PRESS AI / POWER BUTTON TO WAKE** underneath. The MDI asset is pinned to MaterialDesign-SVG v7.4.47. Because e-paper retains its image without power, the sleep face remains visible while the ESP32 is asleep.
+ESPHome currently resolves local `image.file` paths relative to the Device Builder wrapper rather than to a remote package's cached checkout. Because the production configuration is intentionally a Git-backed package, the firmware references the vendored artwork through this repository's own `raw.githubusercontent.com/CitizenRacer/BasementRemote/main/...` paths. Builds therefore still fetch the BasementRemote repository itself, but they no longer rely on any third-party UI asset host. Source/provenance details are in [`assets/README.md`](assets/README.md).
 
-The wake instruction uses a 30 px bold Roboto font rendered at 1-bit depth for the e-paper display.
+Immediately before deep sleep, the firmware replaces the normal remote face with the approved dedicated 480×800 artwork in [`assets/sleep-screen.svg`](assets/sleep-screen.svg). It shows a large crescent-moon-and-Z sleep mark in the upper-middle of the display with **Sleeping** beneath it. Near the bottom, **Press power to wake** is connected to the right edge by the approved whimsical two-loop arrow. The arrow terminates at approximately 14% from the top of the display, aligning with the physical AI / Power button on the Sticky's right side, and includes the open arrowhead and two small emphasis marks from the approved rendering.
+
+The entire sleep face is rasterized to a 1-bit image at compile time. Its text is contained in the repository-owned SVG, so the firmware no longer downloads Roboto or any other web font while compiling. Because e-paper retains its image without power, the sleep face remains visible while the ESP32 is asleep.
 
 The GT911 touch transform was calibrated on the physical device. Native X matches portrait X; Y is mirrored. The axes must not be swapped.
 
-While awake, the e-paper performs a full refresh every **10 minutes**. It also refreshes at boot/wake, on an explicit Home Assistant **Refresh E-Paper** command, when the low-battery threshold changes, and immediately before deep sleep to render the sleep face. Normal navigation, playback, volume, and app-launch actions do not trigger refreshes.
+While awake, the e-paper performs a full refresh every **10 minutes**. It also refreshes at boot/wake, on an explicit Home Assistant **Refresh E-Paper** command, when the low-battery threshold changes, and immediately before any deep-sleep transition to render the sleep face. Normal navigation, playback, volume, and app-launch actions do not trigger refreshes.
 
 ## Battery telemetry
 
@@ -91,7 +96,9 @@ Battery telemetry stops while the device is in deep sleep and resumes when it wa
 
 ## Power and deep sleep
 
-`media_player.basement_tv` is the authority for whether the remote should remain awake. When the TV is confirmed `off`, the firmware waits 10 seconds to debounce transient state changes. If no power transition is in progress, it renders the sleep face, waits for that e-paper update, and enters indefinite ESP32 deep sleep.
+`media_player.basement_tv` is the authority for the remote's **automatic** awake/asleep lifecycle. When the TV is confirmed `off`, the firmware waits 10 seconds to debounce transient state changes. If no power transition is in progress, it renders the approved sleep face and enters indefinite ESP32 deep sleep.
+
+Home Assistant can bypass the TV-state check by pressing the ESPHome **Sleep Remote** button. This is an explicit manual override: the sleep face is rendered and the Sticky enters the same indefinite deep-sleep state even if `media_player.basement_tv` is still on.
 
 While asleep:
 
@@ -99,6 +106,7 @@ While asleep:
 - touch and display power rails are shut down;
 - the e-paper sleep face remains visible without power;
 - the Sticky normally appears offline in ESPHome and Home Assistant;
+- ESPHome entities, including **Sleep Remote**, are unavailable;
 - battery telemetry stops updating;
 - the touchscreen and side volume buttons do not wake the device; and
 - GPIO4, the physical AI / Power button, is the only wake source.
@@ -139,8 +147,15 @@ The ESP32-S3 configuration uses 32 MB flash and 8 MB octal PSRAM. ESPHome's inte
 .github/workflows/
   esphome.yml                         # CI validation and compilation
 assets/
+  README.md                           # Asset provenance/build notes
   disney-d.png                       # Disney+ launcher artwork
+  hbo-max.svg                        # Vendored HBO Max launcher artwork
+  hulu.svg                           # Vendored Hulu launcher artwork
   paramount-plus.svg                 # Paramount+ launcher artwork
+  sleep-screen.svg                   # Approved 480x800 deep-sleep artwork
+  vendor/
+    heroicons-v2.2.0/                # Vendored awake-control SVGs
+    material-design-icons-v7.4.47/   # Vendored MDI source artwork
 docs/
   remote.jpg                         # Photo of the completed remote
 esphome/
@@ -173,17 +188,19 @@ The firmware requires **ESPHome 2026.8.2 or newer**. CI installs and tests again
 
 ## Operational validation
 
-After installing v1.0.2:
+After installing v1.0.3:
 
-1. Confirm the boot log contains `Basement Remote firmware 1.0.2 ready`.
+1. Confirm the boot log contains `Basement Remote firmware 1.0.3 ready`.
 2. Confirm **Battery Level**, **Battery Voltage**, **Battery Current**, and **Battery Charging** report plausible values while awake.
 3. Test all D-pad directions and Select, including hold-to-repeat.
 4. Test Back, Home, playback controls, and all four app launchers.
 5. Test both physical volume buttons with tap and hold.
 6. Test short- and long-press behavior of the AI / Power button.
-7. Turn the TV off and confirm the screen changes to the sleep face with the large `mdi:sleep` icon and wake instruction before the Sticky goes offline.
-8. Confirm the Sticky wakes only from the AI / Power button and redraws the normal remote face.
-9. If battery level is at or below 20%, confirm the low-battery glyph appears on the awake face.
+7. Turn the TV off and confirm the approved sleep screen appears before the Sticky goes offline: crescent/Z icon, **Sleeping**, **Press power to wake**, and the two-loop arrow pointing to the right-side power-button position.
+8. Wake the Sticky with the physical AI / Power button and confirm the normal remote face returns.
+9. With the Sticky awake, press **Sleep Remote** in Home Assistant and confirm it renders the same sleep face and goes offline even if the TV remains on.
+10. Wake it again with the physical AI / Power button and confirm the **Sleep Remote** entity becomes available again.
+11. If battery level is at or below 20%, confirm the low-battery glyph appears on the awake face.
 
 ## Maintenance rules
 
@@ -192,5 +209,5 @@ After installing v1.0.2:
 - Keep Device Builder limited to the secret-bearing package wrapper.
 - Do not commit credentials or the actual ESPHome API encryption key.
 - Keep app launcher source names aligned with `media_player.basement_apple_tv`.
-- Keep repository-owned launcher artwork deterministic and resolvable from the Device Builder package context.
+- Keep UI artwork vendored under `assets/`; do not add third-party build-time asset URLs back to the production firmware.
 - Do not add e-paper refreshes for individual navigation, playback, volume, or app-launch presses unless the visible UI requires them.

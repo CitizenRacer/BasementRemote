@@ -6,7 +6,7 @@
 substitutions:
   device_name: basement-remote-sticky
   friendly_name: Basement Remote Sticky
-  firmware_version: "1.0.2"
+  firmware_version: "1.0.3"
 
 esphome:
   name: ${device_name}
@@ -358,12 +358,18 @@ script:
                      id(basement_tv_state).state == "off" &&
                      !id(tv_wake_in_progress);
           then:
-            - logger.log: "Basement TV is off; rendering sleep face"
-            - lambda: 'id(sleep_display_active) = true;'
-            - component.update: epaper_display
-            - delay: 1s
-            - logger.log: "Sleep face rendered; entering deep sleep"
-            - deep_sleep.enter: tv_power_sleep
+            - logger.log: "Basement TV is off; entering remote deep sleep"
+            - script.execute: render_sleep_and_enter
+
+  - id: render_sleep_and_enter
+    mode: restart
+    then:
+      - logger.log: "Rendering approved sleep face"
+      - lambda: 'id(sleep_display_active) = true;'
+      - component.update: epaper_display
+      - delay: 1s
+      - logger.log: "Sleep face rendered; entering deep sleep"
+      - deep_sleep.enter: tv_power_sleep
 
   # Remote commands match the Apple TV defaults used by the working
   # custom:universal-remote-card dashboard.
@@ -677,15 +683,11 @@ text_sensor:
                   then:
                     - lambda: 'id(tv_wake_in_progress) = false;'
 
-font:
-  - file: "gfonts://Roboto@700"
-    id: sleep_instruction_font
-    size: 30
-    bpp: 1
-
 image:
-  # Heroicons v2.2.0 solid SVGs, pinned and rasterized to 1-bit assets at
-  # compile time for crisp rendering on the e-paper display.
+  # All build-time artwork is vendored in this repository. ESPHome currently
+  # resolves local image paths relative to the Device Builder wrapper rather
+  # than a remote package's cached checkout, so the package references the
+  # same repository's raw main branch instead of third-party asset hosts.
   - platform: file
     defaults:
       type: BINARY
@@ -693,57 +695,54 @@ image:
       resize: 60x60
     files:
       - id: icon_back
-        file: https://raw.githubusercontent.com/tailwindlabs/heroicons/v2.2.0/optimized/24/solid/arrow-uturn-left.svg
+        file: https://raw.githubusercontent.com/CitizenRacer/BasementRemote/main/assets/vendor/heroicons-v2.2.0/arrow-uturn-left.svg
       - id: icon_home
-        file: https://raw.githubusercontent.com/tailwindlabs/heroicons/v2.2.0/optimized/24/solid/home.svg
+        file: https://raw.githubusercontent.com/CitizenRacer/BasementRemote/main/assets/vendor/heroicons-v2.2.0/home.svg
       - id: icon_skip_backward
-        file: https://raw.githubusercontent.com/tailwindlabs/heroicons/v2.2.0/optimized/24/solid/backward.svg
+        file: https://raw.githubusercontent.com/CitizenRacer/BasementRemote/main/assets/vendor/heroicons-v2.2.0/backward.svg
       - id: icon_play
-        file: https://raw.githubusercontent.com/tailwindlabs/heroicons/v2.2.0/optimized/24/solid/play.svg
+        file: https://raw.githubusercontent.com/CitizenRacer/BasementRemote/main/assets/vendor/heroicons-v2.2.0/play.svg
       - id: icon_pause
-        file: https://raw.githubusercontent.com/tailwindlabs/heroicons/v2.2.0/optimized/24/solid/pause.svg
+        file: https://raw.githubusercontent.com/CitizenRacer/BasementRemote/main/assets/vendor/heroicons-v2.2.0/pause.svg
       - id: icon_skip_forward
-        file: https://raw.githubusercontent.com/tailwindlabs/heroicons/v2.2.0/optimized/24/solid/forward.svg
+        file: https://raw.githubusercontent.com/CitizenRacer/BasementRemote/main/assets/vendor/heroicons-v2.2.0/forward.svg
       - id: icon_up
-        file: https://raw.githubusercontent.com/tailwindlabs/heroicons/v2.2.0/optimized/24/solid/chevron-up.svg
+        file: https://raw.githubusercontent.com/CitizenRacer/BasementRemote/main/assets/vendor/heroicons-v2.2.0/chevron-up.svg
       - id: icon_down
-        file: https://raw.githubusercontent.com/tailwindlabs/heroicons/v2.2.0/optimized/24/solid/chevron-down.svg
+        file: https://raw.githubusercontent.com/CitizenRacer/BasementRemote/main/assets/vendor/heroicons-v2.2.0/chevron-down.svg
       - id: icon_left
-        file: https://raw.githubusercontent.com/tailwindlabs/heroicons/v2.2.0/optimized/24/solid/chevron-left.svg
+        file: https://raw.githubusercontent.com/CitizenRacer/BasementRemote/main/assets/vendor/heroicons-v2.2.0/chevron-left.svg
       - id: icon_right
-        file: https://raw.githubusercontent.com/tailwindlabs/heroicons/v2.2.0/optimized/24/solid/chevron-right.svg
+        file: https://raw.githubusercontent.com/CitizenRacer/BasementRemote/main/assets/vendor/heroicons-v2.2.0/chevron-right.svg
       - id: icon_select
-        file: https://raw.githubusercontent.com/tailwindlabs/heroicons/v2.2.0/optimized/24/solid/cursor-arrow-ripple.svg
+        file: https://raw.githubusercontent.com/CitizenRacer/BasementRemote/main/assets/vendor/heroicons-v2.2.0/cursor-arrow-ripple.svg
 
-  # MDI sleep mark used only for the persistent deep-sleep face.
   - platform: file
     files:
-      - id: icon_sleep
-        file: https://raw.githubusercontent.com/Templarian/MaterialDesign-SVG/v7.4.47/svg/sleep.svg
+      - id: sleep_screen_art
+        file: https://raw.githubusercontent.com/CitizenRacer/BasementRemote/main/assets/sleep-screen.svg
         type: BINARY
         transparency: chroma_key
-        resize: 180x180
+        resize: 480x800
 
-  # Streaming-service logos are rendered monochrome for the 1-bit e-paper.
-  # Repo-owned launcher artwork is fetched by pinned commit because ESPHome
-  # resolves relative image paths against the Device Builder wrapper, not the
-  # cached Git package directory.
+  # Streaming-service logos are also repo-owned so an upstream logo host or
+  # path change cannot break a firmware build.
   - platform: file
     defaults:
       type: BINARY
       transparency: chroma_key
     files:
       - id: logo_hulu
-        file: https://upload.wikimedia.org/wikipedia/commons/f/f9/Hulu_logo_%282018%29.svg
+        file: https://raw.githubusercontent.com/CitizenRacer/BasementRemote/main/assets/hulu.svg
         resize: 90x30
       - id: logo_hbo_max
-        file: https://upload.wikimedia.org/wikipedia/commons/b/b3/HBO_Max_%282025%29.svg
+        file: https://raw.githubusercontent.com/CitizenRacer/BasementRemote/main/assets/hbo-max.svg
         resize: 72x52
       - id: logo_disney_plus
-        file: https://raw.githubusercontent.com/CitizenRacer/BasementRemote/24dca1bc7c561f91ecffb76bb930284a7dd8c159/assets/disney-d.png
+        file: https://raw.githubusercontent.com/CitizenRacer/BasementRemote/main/assets/disney-d.png
         resize: 60x60
       - id: logo_paramount_plus
-        file: https://raw.githubusercontent.com/CitizenRacer/BasementRemote/24dca1bc7c561f91ecffb76bb930284a7dd8c159/assets/paramount-plus.svg
+        file: https://raw.githubusercontent.com/CitizenRacer/BasementRemote/main/assets/paramount-plus.svg
         resize: 86x56
 
 display:
@@ -763,14 +762,11 @@ display:
       it.fill(white);
       it.rectangle(0, 0, w, h, black);
 
-      // The sleep face is deliberately sparse so the persistent e-paper image
-      // clearly communicates both state and the one supported wake action.
+      // The approved 480x800 sleep artwork is a single deterministic 1-bit
+      // asset: moon/Z icon, Sleeping label, wake instruction, and two-loop
+      // arrow aimed at the physical AI / Power button at ~14% screen height.
       if (id(sleep_display_active)) {
-        it.image(w / 2, 55, id(icon_sleep), ImageAlign::TOP_CENTER, black, white);
-        it.printf(w / 2, 270, id(sleep_instruction_font), black,
-                  TextAlign::TOP_CENTER, "PRESS AI / POWER BUTTON");
-        it.printf(w / 2, 315, id(sleep_instruction_font), black,
-                  TextAlign::TOP_CENTER, "TO WAKE");
+        it.image(0, 0, id(sleep_screen_art), ImageAlign::TOP_LEFT, black, white);
         return;
       }
 
@@ -982,6 +978,13 @@ interval:
           }
 
 button:
+  - platform: template
+    name: "Sleep Remote"
+    icon: "mdi:sleep"
+    on_press:
+      - logger.log: "Home Assistant requested remote deep sleep"
+      - script.execute: render_sleep_and_enter
+
   - platform: template
     name: "Refresh E-Paper"
     entity_category: diagnostic
