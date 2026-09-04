@@ -6,7 +6,7 @@
 substitutions:
   device_name: basement-remote-sticky
   friendly_name: Basement Remote Sticky
-  firmware_version: "1.0.6"
+  firmware_version: "1.0.7"
 
 esphome:
   name: ${device_name}
@@ -744,6 +744,7 @@ image:
         # cannot silently reuse the older sleep screen after an OTA update.
         file: https://raw.githubusercontent.com/CitizenRacer/BasementRemote/06855261ccd2b3b9c88b3112ed5227b7a4cc0456/assets/sleep-screen.svg
         type: BINARY
+        transparency: chroma_key
         resize: 480x800
 
   # Streaming-service logos are also repo-owned so an upstream logo host or
