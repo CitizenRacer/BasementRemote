@@ -749,12 +749,19 @@ image:
       - id: logo_hbo_max
         file: https://raw.githubusercontent.com/CitizenRacer/BasementRemote/main/assets/hbo-max.svg
         resize: 72x52
-      - id: logo_disney_plus
-        file: https://raw.githubusercontent.com/CitizenRacer/BasementRemote/main/assets/disney-d.png
-        resize: 60x60
       - id: logo_paramount_plus
         file: https://raw.githubusercontent.com/CitizenRacer/BasementRemote/main/assets/paramount-plus.svg
         resize: 86x56
+        
+  - platform: file
+    defaults:
+      type: BINARY
+      transparency: chroma_key
+      invert_alpha: true
+    files:
+      - id: logo_disney_plus
+        file: https://raw.githubusercontent.com/CitizenRacer/BasementRemote/main/assets/disney-d.png
+        resize: 60x60
 
 display:
   - platform: epaper_spi
