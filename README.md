@@ -2,7 +2,7 @@
 
 Touchscreen TV remote firmware for the **Seeed Studio reTerminal Sticky**, backed directly by Home Assistant over ESPHome's encrypted native API.
 
-Current firmware on `main`: **v1.0.5**. The authoritative version is the `firmware_version` substitution in [`esphome/basement-remote-sticky.yaml`](esphome/basement-remote-sticky.yaml).
+Current firmware on `main`: **v1.0.6**. The authoritative version is the `firmware_version` substitution in [`esphome/basement-remote-sticky.yaml`](esphome/basement-remote-sticky.yaml).
 
 <p align="center">
   <img src="docs/remote.jpg" alt="Seeed Studio reTerminal Sticky running the Basement Remote interface" width="420">
@@ -52,7 +52,7 @@ ESPHome exposes a native Home Assistant **Sleep Remote** button. Pressing it for
 | HBO Max launcher | Select Apple TV source `HBO Max` |
 | Disney+ launcher | Select Apple TV source `Disney+` |
 | Paramount+ launcher | Select Apple TV source `Paramount+` |
-| Home Assistant **Sleep Remote** button | Render the sleep face and enter deep sleep immediately |
+| Home Assistant **Sleep Remote** button | Clear the e-paper, render the sleep face, and enter deep sleep |
 
 The D-pad and both physical volume buttons support hold-to-repeat. They fire immediately, begin repeating after 500 ms, and repeat every 175 ms while held.
 
@@ -75,13 +75,15 @@ ESPHome currently resolves local `image.file` paths relative to the Device Build
 
 Immediately before deep sleep, the firmware replaces the normal remote face with the dedicated 480×800 artwork in [`assets/sleep-screen.svg`](assets/sleep-screen.svg). It shows a large crescent-moon-and-Z sleep mark in the upper-middle of the display with **Sleeping** beneath it. Near the bottom, **Press power to wake** is connected to the right edge by a whimsical hand-drawn arrow. The arrow terminates at approximately 14% from the top of the display, aligning with the physical AI / Power button on the Sticky's right side. Its two loops are intentionally irregular rather than uniform.
 
-Firmware v1.0.5 makes two physical-display corrections discovered on the real Sticky: **Press power to wake** is rendered larger and heavier, with an added stroke so it survives the 1-bit e-paper rasterization reliably, and the arrow shaft now joins the rear leg of the arrowhead instead of running almost into the two lines that form the point. The sleep artwork URL is pinned to the repository commit that contains this asset, which also forces ESPHome to fetch the corrected image instead of reusing a cached older copy.
+Firmware v1.0.5 made two physical-display corrections discovered on the real Sticky: **Press power to wake** is rendered larger and heavier, with an added stroke so it survives the 1-bit e-paper rasterization reliably, and the arrow shaft joins the rear leg of the arrowhead instead of running almost into the two lines that form the point. The sleep artwork URL is pinned to the repository commit that contains this asset, which also forces ESPHome to fetch the corrected image instead of reusing a cached older copy.
+
+Firmware v1.0.6 fixes two additional issues seen on the physical display. The sleep artwork is now treated as **opaque** instead of using `transparency: chroma_key`, so its white background is part of the compiled image rather than transparent. The sleep transition is also a two-pass full refresh: first the entire panel is driven white, the firmware waits 10 seconds for the asynchronous e-paper waveform to finish, then it renders the sleep artwork and waits another 10 seconds before cutting display power and entering ESP32 deep sleep. This is intended to remove the ghost of the awake remote and prevent the final sleep refresh from being interrupted by deep sleep.
 
 The entire sleep face is rasterized to a 1-bit image at compile time. Its text is contained in the repository-owned SVG, so the firmware no longer downloads Roboto or any other web font while compiling. Because e-paper retains its image without power, the sleep face remains visible while the ESP32 is asleep.
 
 The GT911 touch transform was calibrated on the physical device. Native X matches portrait X; Y is mirrored. The axes must not be swapped.
 
-While awake, the e-paper performs a full refresh every **10 minutes**. It also refreshes at boot/wake, on an explicit Home Assistant **Refresh E-Paper** command, when the low-battery threshold changes, and immediately before any deep-sleep transition to render the sleep face. Normal navigation, playback, volume, and app-launch actions do not trigger refreshes.
+While awake, the e-paper performs a full refresh every **10 minutes**. It also refreshes at boot/wake, on an explicit Home Assistant **Refresh E-Paper** command, when the low-battery threshold changes, and during the two full-refresh passes immediately before deep sleep. Normal navigation, playback, volume, and app-launch actions do not trigger refreshes.
 
 ## Battery telemetry
 
@@ -98,9 +100,9 @@ Battery telemetry stops while the device is in deep sleep and resumes when it wa
 
 ## Power and deep sleep
 
-`media_player.basement_tv` is the authority for the remote's **automatic** awake/asleep lifecycle. When the TV is confirmed `off`, the firmware waits 10 seconds to debounce transient state changes. If no power transition is in progress, it renders the approved sleep face and enters indefinite ESP32 deep sleep.
+`media_player.basement_tv` is the authority for the remote's **automatic** awake/asleep lifecycle. When the TV is confirmed `off`, the firmware waits 10 seconds to debounce transient state changes. If no power transition is in progress, it performs a full-white cleaning refresh, renders the approved sleep face with a second full refresh, and then enters indefinite ESP32 deep sleep.
 
-Home Assistant can bypass the TV-state check by pressing the ESPHome **Sleep Remote** button. This is an explicit manual override: the sleep face is rendered and the Sticky enters the same indefinite deep-sleep state even if `media_player.basement_tv` is still on.
+Home Assistant can bypass the TV-state check by pressing the ESPHome **Sleep Remote** button. This is an explicit manual override: the same white-cleaning refresh and sleep-face refresh are performed before the Sticky enters deep sleep, even if `media_player.basement_tv` is still on.
 
 While asleep:
 
@@ -190,19 +192,20 @@ The firmware requires **ESPHome 2026.8.2 or newer**. CI installs and tests again
 
 ## Operational validation
 
-After installing v1.0.5:
+After installing v1.0.6:
 
-1. Confirm the boot log contains `Basement Remote firmware 1.0.5 ready`.
+1. Confirm the boot log contains `Basement Remote firmware 1.0.6 ready`.
 2. Confirm **Battery Level**, **Battery Voltage**, **Battery Current**, and **Battery Charging** report plausible values while awake.
 3. Test all D-pad directions and Select, including hold-to-repeat.
 4. Test Back, Home, playback controls, and all four app launchers.
 5. Test both physical volume buttons with tap and hold.
 6. Test short- and long-press behavior of the AI / Power button.
-7. Turn the TV off and confirm the sleep screen appears before the Sticky goes offline: crescent/Z icon, **Sleeping**, clearly visible **Press power to wake**, and the irregular two-loop arrow pointing to the right-side power-button position with the shaft joining behind the arrowhead point.
-8. Wake the Sticky with the physical AI / Power button and confirm the normal remote face returns.
-9. With the Sticky awake, press **Sleep Remote** in Home Assistant and confirm it renders the same sleep face and goes offline even if the TV remains on.
-10. Wake it again with the physical AI / Power button and confirm the **Sleep Remote** entity becomes available again.
-11. If battery level is at or below 20%, confirm the low-battery glyph appears on the awake face.
+7. Turn the TV off and confirm the panel first clears completely white, then renders the sleep screen with no visible ghost of the remote controls. Confirm the crescent/Z icon, **Sleeping**, clearly visible **Press power to wake**, and the irregular two-loop arrow all render.
+8. Confirm the Sticky remains awake long enough for both full e-paper refreshes to finish before it goes offline.
+9. Wake the Sticky with the physical AI / Power button and confirm the normal remote face returns.
+10. With the Sticky awake, press **Sleep Remote** in Home Assistant and confirm it performs the same white-clear → sleep-face sequence and then goes offline even if the TV remains on.
+11. Wake it again with the physical AI / Power button and confirm the **Sleep Remote** entity becomes available again.
+12. If battery level is at or below 20%, confirm the low-battery glyph appears on the awake face.
 
 ## Maintenance rules
 
