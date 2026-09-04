@@ -734,7 +734,8 @@ image:
         type: BINARY
         transparency: chroma_key
         resize: 480x800
-
+        invert_alpha: true
+        
   # Streaming-service logos are also repo-owned so an upstream logo host or
   # path change cannot break a firmware build.
   - platform: file
