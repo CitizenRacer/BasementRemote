@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 480 800">
+  <rect width="480" height="800" fill="#fff"/>
+
+  <!-- Approved sleep icon: crescent moon with three ascending Z marks. -->
+  <circle cx="194" cy="337" r="82" fill="#000"/>
+  <circle cx="229" cy="305" r="73" fill="#fff"/>
+  <path d="M238 316h26l-26 30h26" fill="none" stroke="#000" stroke-width="9" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M274 278h32l-32 37h32" fill="none" stroke="#000" stroke-width="10" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M316 232h40l-40 47h40" fill="none" stroke="#000" stroke-width="12" stroke-linecap="round" stroke-linejoin="round"/>
+
+  <text x="240" y="480" text-anchor="middle" fill="#000" font-family="Arial, Helvetica, sans-serif" font-size="34" font-weight="400" letter-spacing="1.5">Sleeping</text>
+  <text x="240" y="706" text-anchor="middle" fill="#000" font-family="Arial, Helvetica, sans-serif" font-size="22" font-weight="400" letter-spacing="1.2">Press power to wake</text>
+
+  <!-- Whimsical two-loop arrow from the wake instruction to the physical power button. -->
+  <path d="M300 680
+           C350 660 397 600 413 535
+           C415 525 415 516 413 510
+           a28 28 0 1 1 -56 0
+           a28 28 0 1 1 56 0
+           C414 475 414 445 415 420
+           a28 28 0 1 1 -56 0
+           a28 28 0 1 1 56 0
+           C420 330 395 235 438 155
+           C447 138 453 123 458 112"
+        fill="none" stroke="#000" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M458 112 L436 114 M458 112 L450 134" fill="none" stroke="#000" stroke-width="3" stroke-linecap="round"/>
+  <path d="M432 96 L420 84 M451 90 L447 74" fill="none" stroke="#000" stroke-width="3" stroke-linecap="round"/>
+</svg>
