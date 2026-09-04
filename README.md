@@ -2,7 +2,7 @@
 
 Touchscreen TV remote firmware for the **Seeed Studio reTerminal Sticky**, backed directly by Home Assistant over ESPHome's encrypted native API.
 
-Current firmware on `main`: **v1.0.3**. The authoritative version is the `firmware_version` substitution in [`esphome/basement-remote-sticky.yaml`](esphome/basement-remote-sticky.yaml).
+Current firmware on `main`: **v1.0.4**. The authoritative version is the `firmware_version` substitution in [`esphome/basement-remote-sticky.yaml`](esphome/basement-remote-sticky.yaml).
 
 <p align="center">
   <img src="docs/remote.jpg" alt="Seeed Studio reTerminal Sticky running the Basement Remote interface" width="420">
@@ -69,11 +69,11 @@ The remote uses the Sticky's 480×800 portrait e-paper display with a static, ic
 
 The up/down D-pad controls are 180×90. Left/right use the same dimensions rotated 90 degrees, so they are 90×180.
 
-All UI artwork used by the firmware is now stored under [`assets/`](assets/). The awake controls use vendored **Heroicons v2.2.0** solid SVGs. Hulu, HBO Max, Disney+, and Paramount+ launcher artwork is also repository-owned. The previous external Heroicons, Material Design Icons, Wikimedia, Google Fonts, and commit-pinned launcher fetches have been removed from the firmware configuration.
+All UI artwork used by the firmware is stored under [`assets/`](assets/). The awake controls use vendored **Heroicons v2.2.0** solid SVGs. Hulu, HBO Max, Disney+, and Paramount+ launcher artwork is also repository-owned. The previous external Heroicons, Material Design Icons, Wikimedia, Google Fonts, and commit-pinned launcher fetches have been removed from the firmware configuration.
 
 ESPHome currently resolves local `image.file` paths relative to the Device Builder wrapper rather than to a remote package's cached checkout. Because the production configuration is intentionally a Git-backed package, the firmware references the vendored artwork through this repository's own `raw.githubusercontent.com/CitizenRacer/BasementRemote/main/...` paths. Builds therefore still fetch the BasementRemote repository itself, but they no longer rely on any third-party UI asset host. Source/provenance details are in [`assets/README.md`](assets/README.md).
 
-Immediately before deep sleep, the firmware replaces the normal remote face with the approved dedicated 480×800 artwork in [`assets/sleep-screen.svg`](assets/sleep-screen.svg). It shows a large crescent-moon-and-Z sleep mark in the upper-middle of the display with **Sleeping** beneath it. Near the bottom, **Press power to wake** is connected to the right edge by the approved whimsical two-loop arrow. The arrow terminates at approximately 14% from the top of the display, aligning with the physical AI / Power button on the Sticky's right side, and includes the open arrowhead and two small emphasis marks from the approved rendering.
+Immediately before deep sleep, the firmware replaces the normal remote face with the approved dedicated 480×800 artwork in [`assets/sleep-screen.svg`](assets/sleep-screen.svg). It shows a large crescent-moon-and-Z sleep mark in the upper-middle of the display with **Sleeping** beneath it. Near the bottom, **Press power to wake** is connected to the right edge by a whimsical hand-drawn arrow. The arrow terminates at approximately 14% from the top of the display, aligning with the physical AI / Power button on the Sticky's right side. Its two loops are intentionally irregular rather than uniform, the line flows directly into the arrowhead point, and there are no detached emphasis marks near the tip.
 
 The entire sleep face is rasterized to a 1-bit image at compile time. Its text is contained in the repository-owned SVG, so the firmware no longer downloads Roboto or any other web font while compiling. Because e-paper retains its image without power, the sleep face remains visible while the ESP32 is asleep.
 
@@ -188,15 +188,15 @@ The firmware requires **ESPHome 2026.8.2 or newer**. CI installs and tests again
 
 ## Operational validation
 
-After installing v1.0.3:
+After installing v1.0.4:
 
-1. Confirm the boot log contains `Basement Remote firmware 1.0.3 ready`.
+1. Confirm the boot log contains `Basement Remote firmware 1.0.4 ready`.
 2. Confirm **Battery Level**, **Battery Voltage**, **Battery Current**, and **Battery Charging** report plausible values while awake.
 3. Test all D-pad directions and Select, including hold-to-repeat.
 4. Test Back, Home, playback controls, and all four app launchers.
 5. Test both physical volume buttons with tap and hold.
 6. Test short- and long-press behavior of the AI / Power button.
-7. Turn the TV off and confirm the approved sleep screen appears before the Sticky goes offline: crescent/Z icon, **Sleeping**, **Press power to wake**, and the two-loop arrow pointing to the right-side power-button position.
+7. Turn the TV off and confirm the approved sleep screen appears before the Sticky goes offline: crescent/Z icon, **Sleeping**, **Press power to wake**, and the irregular two-loop arrow pointing to the right-side power-button position with no detached marks at the arrow tip.
 8. Wake the Sticky with the physical AI / Power button and confirm the normal remote face returns.
 9. With the Sticky awake, press **Sleep Remote** in Home Assistant and confirm it renders the same sleep face and goes offline even if the TV remains on.
 10. Wake it again with the physical AI / Power button and confirm the **Sleep Remote** entity becomes available again.
