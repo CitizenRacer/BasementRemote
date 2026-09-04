@@ -6,7 +6,7 @@
 substitutions:
   device_name: basement-remote-sticky
   friendly_name: Basement Remote Sticky
-  firmware_version: "1.0.8"
+  firmware_version: "1.0.9"
 
 esphome:
   name: ${device_name}
@@ -284,12 +284,6 @@ globals:
     restore_value: false
     initial_value: "false"
 
-  # True only for the full-white cleaning refresh that precedes the sleep face.
-  - id: sleep_clear_active
-    type: bool
-    restore_value: false
-    initial_value: "false"
-
   # Stored across deep sleep so an e-paper low-battery warning is refreshed
   # only when the <=20% threshold actually changes.
   - id: battery_low_displayed
@@ -370,22 +364,14 @@ script:
   - id: render_sleep_and_enter
     mode: restart
     then:
-      # E-paper refreshes are asynchronous. First drive every pixel white and
-      # leave enough time for the SSD1677 waveform to finish before drawing the
-      # sleep face. This removes the previous remote image instead of layering
-      # the sleep artwork over residual charge from the awake screen.
-      - logger.log: "Clearing e-paper before sleep"
-      - lambda: |-
-          id(sleep_display_active) = false;
-          id(sleep_clear_active) = true;
-      - component.update: epaper_display
-      - delay: 10s
+      # Every display update is already a full SSD1677 refresh because
+      # full_update_every is 1. Rendering an explicit white frame first only
+      # creates a long blank interval. Draw the final sleep face directly and
+      # keep the ESP32 awake long enough for that asynchronous full refresh to
+      # finish before display power is removed.
       - logger.log: "Rendering approved sleep face"
-      - lambda: |-
-          id(sleep_clear_active) = false;
-          id(sleep_display_active) = true;
+      - lambda: 'id(sleep_display_active) = true;'
       - component.update: epaper_display
-      # Do not cut display power while the asynchronous full refresh is active.
       - delay: 10s
       - logger.log: "Sleep face rendered; entering deep sleep"
       - deep_sleep.enter: tv_power_sleep
@@ -681,10 +667,13 @@ text_sensor:
     ip_address:
       name: "IP Address"
 
-  # The LG TV is the authority for the remote's awake/asleep lifecycle.
+  # The LG TV state imported from Home Assistant is both the authority for the
+  # automatic sleep decision and an exposed diagnostic so the exact state the
+  # Sticky is acting on can be inspected in Home Assistant.
   - platform: homeassistant
     id: basement_tv_state
-    internal: true
+    name: "TV State Seen By Remote"
+    entity_category: diagnostic
     entity_id: media_player.basement_tv
     on_value:
       then:
@@ -781,14 +770,6 @@ display:
       const int h = it.get_height();
 
       it.fill(white);
-
-      // The first sleep transition refresh is intentionally completely blank.
-      // Returning before the border is drawn ensures every pixel is driven to
-      // white before the final sleep artwork is applied.
-      if (id(sleep_clear_active)) {
-        return;
-      }
-
       it.rectangle(0, 0, w, h, black);
 
       // The approved 480x800 sleep artwork is a single deterministic 1-bit
