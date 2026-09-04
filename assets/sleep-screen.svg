@@ -9,9 +9,10 @@
   <path d="M311 233h39l-39 46h39" fill="none" stroke="#000" stroke-width="12" stroke-linecap="round" stroke-linejoin="round"/>
 
   <text x="240" y="483" text-anchor="middle" fill="#000" font-family="Arial, Helvetica, sans-serif" font-size="34" font-weight="400">Sleeping</text>
-  <text x="240" y="708" text-anchor="middle" fill="#000" font-family="Arial, Helvetica, sans-serif" font-size="22" font-weight="400">Press power to wake</text>
+  <!-- Heavier/larger than the previous version so the 1-bit e-paper rasterizer cannot lose the wake instruction. -->
+  <text x="240" y="708" text-anchor="middle" fill="#000" stroke="#000" stroke-width="0.7" paint-order="stroke" font-family="Arial, Helvetica, sans-serif" font-size="28" font-weight="600">Press power to wake</text>
 
-  <!-- Approved whimsical arrow: intentionally irregular loops, no detached emphasis marks. -->
+  <!-- Whimsical arrow: intentionally irregular loops. The shaft joins the rear leg of the arrowhead instead of running into the tip. -->
   <path d="M292 681
            C344 655 385 608 404 552
            C414 522 414 496 406 477
@@ -23,8 +24,8 @@
            C360 389 361 416 378 428
            C396 440 416 427 421 399
            C430 351 416 287 420 239
-           C424 193 440 143 458 112"
+           C424 193 438 151 452 134"
         fill="none" stroke="#000" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"/>
-  <path d="M458 112 L438 118 M458 112 L449 135"
+  <path d="M438 120 L461 108 L452 134"
         fill="none" stroke="#000" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"/>
 </svg>
