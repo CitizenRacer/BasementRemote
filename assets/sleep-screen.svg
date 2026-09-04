@@ -1,28 +1,30 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 480 800">
   <rect width="480" height="800" fill="#fff"/>
 
-  <!-- Approved sleep icon: crescent moon with three ascending Z marks. -->
-  <circle cx="194" cy="337" r="82" fill="#000"/>
-  <circle cx="229" cy="305" r="73" fill="#fff"/>
-  <path d="M238 316h26l-26 30h26" fill="none" stroke="#000" stroke-width="9" stroke-linecap="round" stroke-linejoin="round"/>
-  <path d="M274 278h32l-32 37h32" fill="none" stroke="#000" stroke-width="10" stroke-linecap="round" stroke-linejoin="round"/>
-  <path d="M316 232h40l-40 47h40" fill="none" stroke="#000" stroke-width="12" stroke-linecap="round" stroke-linejoin="round"/>
+  <!-- Sleep mark -->
+  <circle cx="185" cy="337" r="81" fill="#000"/>
+  <circle cx="219" cy="305" r="72" fill="#fff"/>
+  <path d="M233 315h25l-25 30h25" fill="none" stroke="#000" stroke-width="9" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M269 278h31l-31 36h31" fill="none" stroke="#000" stroke-width="10" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M311 233h39l-39 46h39" fill="none" stroke="#000" stroke-width="12" stroke-linecap="round" stroke-linejoin="round"/>
 
-  <text x="240" y="480" text-anchor="middle" fill="#000" font-family="Arial, Helvetica, sans-serif" font-size="34" font-weight="400" letter-spacing="1.5">Sleeping</text>
-  <text x="240" y="706" text-anchor="middle" fill="#000" font-family="Arial, Helvetica, sans-serif" font-size="22" font-weight="400" letter-spacing="1.2">Press power to wake</text>
+  <text x="240" y="483" text-anchor="middle" fill="#000" font-family="Arial, Helvetica, sans-serif" font-size="34" font-weight="400">Sleeping</text>
+  <text x="240" y="708" text-anchor="middle" fill="#000" font-family="Arial, Helvetica, sans-serif" font-size="22" font-weight="400">Press power to wake</text>
 
-  <!-- Whimsical two-loop arrow from the wake instruction to the physical power button. -->
-  <path d="M300 680
-           C350 660 397 600 413 535
-           C415 525 415 516 413 510
-           a28 28 0 1 1 -56 0
-           a28 28 0 1 1 56 0
-           C414 475 414 445 415 420
-           a28 28 0 1 1 -56 0
-           a28 28 0 1 1 56 0
-           C420 330 395 235 438 155
-           C447 138 453 123 458 112"
-        fill="none" stroke="#000" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
-  <path d="M458 112 L436 114 M458 112 L450 134" fill="none" stroke="#000" stroke-width="3" stroke-linecap="round"/>
-  <path d="M432 96 L420 84 M451 90 L447 74" fill="none" stroke="#000" stroke-width="3" stroke-linecap="round"/>
+  <!-- Approved whimsical arrow: intentionally irregular loops, no detached emphasis marks. -->
+  <path d="M292 681
+           C344 655 385 608 404 552
+           C414 522 414 496 406 477
+           C398 458 378 454 365 469
+           C351 486 358 515 379 523
+           C397 530 412 516 417 492
+           C423 464 417 430 410 405
+           C404 382 389 370 375 379
+           C360 389 361 416 378 428
+           C396 440 416 427 421 399
+           C430 351 416 287 420 239
+           C424 193 440 143 458 112"
+        fill="none" stroke="#000" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M458 112 L438 118 M458 112 L449 135"
+        fill="none" stroke="#000" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"/>
 </svg>
