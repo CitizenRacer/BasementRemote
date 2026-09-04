@@ -2,7 +2,7 @@
 
 Touchscreen TV remote firmware for the **Seeed Studio reTerminal Sticky**, backed directly by Home Assistant over ESPHome's encrypted native API.
 
-Current firmware on `main`: **v1.0.6**. The authoritative version is the `firmware_version` substitution in [`esphome/basement-remote-sticky.yaml`](esphome/basement-remote-sticky.yaml).
+Current firmware on `main`: **v1.0.8**. The authoritative version is the `firmware_version` substitution in [`esphome/basement-remote-sticky.yaml`](esphome/basement-remote-sticky.yaml).
 
 <p align="center">
   <img src="docs/remote.jpg" alt="Seeed Studio reTerminal Sticky running the Basement Remote interface" width="420">
@@ -75,11 +75,15 @@ ESPHome currently resolves local `image.file` paths relative to the Device Build
 
 Immediately before deep sleep, the firmware replaces the normal remote face with the dedicated 480×800 artwork in [`assets/sleep-screen.svg`](assets/sleep-screen.svg). It shows a large crescent-moon-and-Z sleep mark in the upper-middle of the display with **Sleeping** beneath it. Near the bottom, **Press power to wake** is connected to the right edge by a whimsical hand-drawn arrow. The arrow terminates at approximately 14% from the top of the display, aligning with the physical AI / Power button on the Sticky's right side. Its two loops are intentionally irregular rather than uniform.
 
-Firmware v1.0.5 made two physical-display corrections discovered on the real Sticky: **Press power to wake** is rendered larger and heavier, with an added stroke so it survives the 1-bit e-paper rasterization reliably, and the arrow shaft joins the rear leg of the arrowhead instead of running almost into the two lines that form the point. The sleep artwork URL is pinned to the repository commit that contains this asset, which also forces ESPHome to fetch the corrected image instead of reusing a cached older copy.
+Firmware v1.0.5 made two physical-display corrections discovered on the real Sticky: **Press power to wake** was made larger and heavier, and the arrow shaft was moved to join behind the arrowhead rather than crowding the two lines that form the point.
 
-Firmware v1.0.6 fixes two additional issues seen on the physical display. The sleep artwork is now treated as **opaque** instead of using `transparency: chroma_key`, so its white background is part of the compiled image rather than transparent. The sleep transition is also a two-pass full refresh: first the entire panel is driven white, the firmware waits 10 seconds for the asynchronous e-paper waveform to finish, then it renders the sleep artwork and waits another 10 seconds before cutting display power and entering ESP32 deep sleep. This is intended to remove the ghost of the awake remote and prevent the final sleep refresh from being interrupted by deep sleep.
+Firmware v1.0.6 added a two-pass full-refresh sleep transition. The panel is first driven completely white and allowed 10 seconds to finish its asynchronous SSD1677 refresh. The sleep face is then drawn with a second full refresh and allowed another 10 seconds to complete before display power is removed and the ESP32 enters deep sleep. This is intended to eliminate the ghost of the awake remote and prevent the final sleep refresh from being interrupted.
 
-The entire sleep face is rasterized to a 1-bit image at compile time. Its text is contained in the repository-owned SVG, so the firmware no longer downloads Roboto or any other web font while compiling. Because e-paper retains its image without power, the sleep face remains visible while the ESP32 is asleep.
+Firmware v1.0.7 restored `transparency: chroma_key` for the sleep image after physical testing showed that making the image opaque did not fix the missing-label problem.
+
+Firmware v1.0.8 converts both **Sleeping** and **Press power to wake** from live SVG text elements into ordinary vector path geometry. ESPHome/resvg therefore has no font selection, font loading, or text shaping to perform for the sleep face. The firmware pins the vector-only sleep asset by commit so an older cached SVG cannot be reused.
+
+The entire sleep face is rasterized to a 1-bit image at compile time. All visible lettering in the sleep artwork is already vector outline geometry before ESPHome sees it, so the sleep screen has no font dependency at build time. Because e-paper retains its image without power, the sleep face remains visible while the ESP32 is asleep.
 
 The GT911 touch transform was calibrated on the physical device. Native X matches portrait X; Y is mirrored. The axes must not be swapped.
 
@@ -156,7 +160,7 @@ assets/
   hbo-max.svg                        # Vendored HBO Max launcher artwork
   hulu.svg                           # Vendored Hulu launcher artwork
   paramount-plus.svg                 # Paramount+ launcher artwork
-  sleep-screen.svg                   # Approved 480x800 deep-sleep artwork
+  sleep-screen.svg                   # Approved 480x800 deep-sleep artwork, including outlined text
   vendor/
     heroicons-v2.2.0/                # Vendored awake-control SVGs
     material-design-icons-v7.4.47/   # Vendored MDI source artwork
@@ -186,26 +190,27 @@ The wrapper imports `esphome/basement-remote-sticky.yaml` from `main` with a 60-
 
 ## Building and CI
 
-The firmware requires **ESPHome 2026.8.2 or newer**. CI installs and tests against the repository's configured ESPHome version.
+The firmware requires **ESPHome 2026.8.2 or newer**.
 
-`.github/workflows/esphome.yml` runs on pushes and pull requests, creates CI-only dummy secrets, validates the package configuration, compiles the firmware, and validates the production GitHub-backed Device Builder wrapper on `main`.
+The repository still contains `.github/workflows/esphome.yml`, so GitHub Actions may run automatically after pushes. It is **not a release gate** for this project: requested changes are checked directly into `main` without waiting for Actions to complete.
 
 ## Operational validation
 
-After installing v1.0.6:
+After installing v1.0.8:
 
-1. Confirm the boot log contains `Basement Remote firmware 1.0.6 ready`.
+1. Confirm the boot log contains `Basement Remote firmware 1.0.8 ready`.
 2. Confirm **Battery Level**, **Battery Voltage**, **Battery Current**, and **Battery Charging** report plausible values while awake.
 3. Test all D-pad directions and Select, including hold-to-repeat.
 4. Test Back, Home, playback controls, and all four app launchers.
 5. Test both physical volume buttons with tap and hold.
 6. Test short- and long-press behavior of the AI / Power button.
-7. Turn the TV off and confirm the panel first clears completely white, then renders the sleep screen with no visible ghost of the remote controls. Confirm the crescent/Z icon, **Sleeping**, clearly visible **Press power to wake**, and the irregular two-loop arrow all render.
-8. Confirm the Sticky remains awake long enough for both full e-paper refreshes to finish before it goes offline.
-9. Wake the Sticky with the physical AI / Power button and confirm the normal remote face returns.
-10. With the Sticky awake, press **Sleep Remote** in Home Assistant and confirm it performs the same white-clear → sleep-face sequence and then goes offline even if the TV remains on.
-11. Wake it again with the physical AI / Power button and confirm the **Sleep Remote** entity becomes available again.
-12. If battery level is at or below 20%, confirm the low-battery glyph appears on the awake face.
+7. Turn the TV off and confirm the panel first clears completely white, then renders the sleep screen with no visible ghost of the remote controls.
+8. Confirm **Sleeping** and **Press power to wake** are both visible; both are compiled from vector outlines rather than SVG text.
+9. Confirm the Sticky remains awake long enough for both full e-paper refreshes to finish before it goes offline.
+10. Wake the Sticky with the physical AI / Power button and confirm the normal remote face returns.
+11. With the Sticky awake, press **Sleep Remote** in Home Assistant and confirm it performs the same white-clear → sleep-face sequence and then goes offline even if the TV remains on.
+12. Wake it again with the physical AI / Power button and confirm the **Sleep Remote** entity becomes available again.
+13. If battery level is at or below 20%, confirm the low-battery glyph appears on the awake face.
 
 ## Maintenance rules
 
