@@ -6,7 +6,7 @@
 substitutions:
   device_name: basement-remote-sticky
   friendly_name: Basement Remote Sticky
-  firmware_version: "1.0.3"
+  firmware_version: "1.0.4"
 
 esphome:
   name: ${device_name}
