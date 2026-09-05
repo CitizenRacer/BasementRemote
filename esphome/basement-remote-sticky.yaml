@@ -6,7 +6,7 @@
 substitutions:
   device_name: basement-remote-sticky
   friendly_name: Basement Remote Sticky
-  firmware_version: "1.0.13"
+  firmware_version: "1.0.14"
 
 esphome:
   name: ${device_name}
@@ -23,6 +23,13 @@ esphome:
         - lambda: |-
             gpio_deep_sleep_hold_dis();
             gpio_hold_dis(GPIO_NUM_42);
+            // GPIO42 is held low while asleep to remove power from the GT911.
+            // The GPIO switch component has already restored its logical ON
+            // state at this point, so drive the physical pin high immediately
+            // after releasing the hold. This guarantees the GT911 is powered
+            // before its startup reset/calibration sequence runs.
+            gpio_set_direction(GPIO_NUM_42, GPIO_MODE_OUTPUT);
+            gpio_set_level(GPIO_NUM_42, 1);
             gpio_hold_dis(GPIO_NUM_45);
             gpio_hold_dis(GPIO_NUM_46);
             gpio_hold_dis(GPIO_NUM_47);
@@ -159,20 +166,25 @@ binary_sensor:
           id(tv_wake_in_progress) = true;
     on_release:
       - lambda: |-
-          const uint32_t held_ms = millis() - id(ai_power_pressed_ms);
           const bool was_sleep_wake = id(woke_from_tv_off_sleep);
           id(woke_from_tv_off_sleep) = false;
 
+          // A press that woke deep sleep has already queued TV-on from
+          // deep_sleep.on_wake. Do not classify its release as a second power
+          // command; that was the race that could leave the TV off or reverse
+          // a wake with a later suspend.
+          if (was_sleep_wake) {
+            ESP_LOGD("power", "Ignoring release classification for deep-sleep wake press");
+            return;
+          }
+
+          const uint32_t held_ms = millis() - id(ai_power_pressed_ms);
           if (held_ms >= 800) {
             ESP_LOGI("power", "AI / Power long press (%u ms): TV off", held_ms);
             id(turn_tv_off_after_power_button).execute();
           } else {
             ESP_LOGI("power", "AI / Power short press (%u ms): TV on", held_ms);
             id(wake_tv_after_power_button).execute();
-          }
-
-          if (was_sleep_wake) {
-            ESP_LOGD("power", "Classified AI button press that woke deep sleep");
           }
 
   - platform: gpio
@@ -296,7 +308,7 @@ script:
     mode: restart
     then:
       - lambda: 'id(tv_wake_in_progress) = true;'
-      - logger.log: "AI / Power short press: waiting for Home Assistant"
+      - logger.log: "AI / Power wake: waiting for Home Assistant"
       - wait_until:
           condition:
             api.connected:
@@ -309,7 +321,7 @@ script:
           else:
             - logger.log:
                 level: ERROR
-                format: "AI / Power short press: Home Assistant did not connect"
+                format: "AI / Power wake: Home Assistant did not connect"
       # Give HDMI-CEC and the LG integration time to report the TV as on.
       - delay: 30s
       - lambda: 'id(tv_wake_in_progress) = false;'
@@ -736,7 +748,7 @@ image:
         transparency: chroma_key
         resize: 480x800
         invert_alpha: true
-        
+
   # Streaming-service logos are also repo-owned so an upstream logo host or
   # path change cannot break a firmware build.
   - platform: file
@@ -753,7 +765,7 @@ image:
       - id: logo_paramount_plus
         file: https://raw.githubusercontent.com/CitizenRacer/BasementRemote/main/assets/paramount-plus.svg
         resize: 86x56
-        
+
   - platform: file
     defaults:
       type: BINARY
@@ -953,9 +965,9 @@ touchscreen:
             id(touch_repeat_command) = 0;
 
 # Sleep indefinitely whenever the physical LG TV is confirmed off. GPIO4 is
-# the active-low AI / Power button and the only wake source. The button press
-# that wakes the ESP32 is timed through release so short/long semantics remain
-# identical whether the remote began awake or asleep.
+# the active-low AI / Power button and the only wake source. A wake press always
+# queues TV-on as soon as the ESPHome native API reconnects; awake presses retain
+# the normal short=on / long=off classification.
 deep_sleep:
   id: tv_power_sleep
   wakeup_pin:
@@ -971,6 +983,17 @@ deep_sleep:
         id(woke_from_tv_off_sleep) = true;
         id(ai_power_pressed_ms) = millis();
         id(tv_wake_in_progress) = true;
+    - logger.log: "AI / Power woke remote from TV-off deep sleep; waking TV"
+    - script.execute: wake_tv_after_power_button
+    # Normally on_release clears the wake marker. If the release occurred before
+    # the GPIO binary sensor finished startup, clear the stale marker here so a
+    # later awake press cannot be misclassified using the old wake timestamp.
+    - delay: 5s
+    - lambda: |-
+        if (id(woke_from_tv_off_sleep)) {
+          ESP_LOGW("power", "Wake-button release was not observed; clearing wake classification");
+          id(woke_from_tv_off_sleep) = false;
+        }
 
 interval:
   - interval: 50ms
