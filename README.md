@@ -6,7 +6,7 @@ Touchscreen e-paper TV remote firmware backed directly by Home Assistant over ES
 
 | Hardware | Firmware | Status |
 | --- | --- | --- |
-| Seeed Studio reTerminal Sticky | **v1.0.23** | Production target; wake, touch, readiness, and sleep availability hardening |
+| Seeed Studio reTerminal Sticky | **v1.0.24** | Production target; wake, touch, readiness, sleep availability, and Find Remote support |
 | M5Stack M5PaperMono Lite (C153-LITE) | **v0.1.0** | Initial bring-up / compile validated; hardware not yet available |
 
 The production Sticky source is [`esphome/basement-remote-sticky.yaml`](esphome/basement-remote-sticky.yaml). The PaperMono target remains separate.
@@ -56,17 +56,32 @@ Both hardware targets use a 480×800 portrait remote layout with a D-pad/Select,
 
 The side volume buttons use the same 500 ms / 175 ms hold-to-repeat behavior as the D-pad.
 
+## Find Remote
+
+v1.0.24 exposes a Home Assistant **Find Remote** switch backed by the reTerminal Sticky's built-in passive buzzer on **GPIO48**.
+
+Turning **Find Remote** on starts a repeating alternating-pitch locator pattern. The buzzer continues until either:
+
+- **Find Remote** is turned off in Home Assistant; or
+- any local input is detected on the Sticky: AI / Power, Volume Up, Volume Down, or any touchscreen press.
+
+A local press still performs its normal remote-control function; cancelling the locator does not consume the command.
+
+While **Find Remote** is active, the normal TV-off sleep path is inhibited so the remote cannot go to sleep and silence itself before it is found. When Find Remote is turned off, normal TV-state-driven sleep resumes. The switch uses `restore_mode: ALWAYS_OFF`, so rebooting or waking the Sticky cannot unexpectedly restart the buzzer.
+
+Because deliberate TV-off sleep disables Wi-Fi, **Find Remote is unavailable while the Sticky is already asleep**. It can be activated only while the remote is awake and connected to Home Assistant.
+
 ## Display and automatic sleep
 
 The Sticky uses ESPHome's `Seeed-reTerminal-Sticky` SSD1677 display model with a 480×800 portrait UI. Normal remote commands do not refresh the e-paper display. A full refresh occurs on the configured periodic refresh and on explicit **Refresh E-Paper** requests.
 
-`media_player.basement_tv` is the authority for automatic sleep. When it reports exactly `off`, firmware debounces the state, renders [`assets/sleep-screen.svg`](assets/sleep-screen.svg), waits for the asynchronous refresh to finish, disables Wi-Fi, and then enters ESP32 deep sleep. GPIO4, the physical AI / Power button, is the wake source.
+`media_player.basement_tv` is the authority for automatic sleep. When it reports exactly `off`, firmware debounces the state, renders [`assets/sleep-screen.svg`](assets/sleep-screen.svg), waits for the asynchronous refresh to finish, disables Wi-Fi, and then enters ESP32 deep sleep. GPIO4, the physical AI / Power button, is the wake source. Active Find Remote temporarily blocks this sleep decision.
 
 ## Home Assistant availability while asleep
 
 The deliberate sleep-entry path disables Wi-Fi **before** calling `deep_sleep.enter`. Home Assistant normally preserves the last values for an expected ESPHome deep-sleep disconnect. By dropping Wi-Fi first, the ESPHome connection is lost unexpectedly, so the remote's state-bearing ESPHome entities should become **Unavailable** while the board is asleep and become available again after wake/reconnect.
 
-This applies to the remote's sensors, binary sensors, and text sensors, including battery telemetry, Wi-Fi signal, uptime, Last Touch X/Y, IP address, physical-button states, charging state, and **TV State Seen By Remote**. Action-only entities such as template buttons do not have a persistent sensor value; Home Assistant may represent them as unavailable/disabled while disconnected. Home Assistant's ESPHome firmware-update entity is a special integration-level exception that is intentionally kept available for deep-sleep devices.
+This applies to the remote's sensors, binary sensors, text sensors, and the **Find Remote** switch, including battery telemetry, Wi-Fi signal, uptime, Last Touch X/Y, IP address, physical-button states, charging state, and **TV State Seen By Remote**. Action-only entities such as template buttons do not have a persistent sensor value; Home Assistant may represent them as unavailable/disabled while disconnected. Home Assistant's ESPHome firmware-update entity is a special integration-level exception that is intentionally kept available for deep-sleep devices.
 
 Ordinary OTA updates and reboots still use normal ESPHome shutdown behavior; only the deliberate TV-off sleep path forces the unexpected disconnect.
 
@@ -75,7 +90,7 @@ Ordinary OTA updates and reboots still use normal ESPHome shutdown behavior; onl
 Beginning with v1.0.22, the old early boot `ready` message is removed. The firmware emits exactly one readiness line per boot:
 
 ```text
-Basement Remote firmware 1.0.23 ready
+Basement Remote firmware 1.0.24 ready
 ```
 
 That line is emitted only after:
@@ -86,7 +101,7 @@ That line is emitted only after:
 - a Home Assistant state-subscribing client is present; and
 - `TV State Seen By Remote` has received a real state instead of `unknown`/`unavailable`.
 
-v1.0.23 additionally serializes readiness checks through a `mode: single` script. ESPHome Device Builder's live logger and other transient API clients can still fire `on_client_connected`, but they can no longer race the Home Assistant readiness check or emit a false `initialization incomplete` error after `ready` has already been logged. Once `ready` has been emitted, later client connections are intentionally silent.
+v1.0.23 serializes readiness checks through a `mode: single` script. ESPHome Device Builder's live logger and other transient API clients can still fire `on_client_connected`, but they can no longer race the Home Assistant readiness check or emit a false `initialization incomplete` error after `ready` has already been logged. Once `ready` has been emitted, later client connections are intentionally silent.
 
 If the Home Assistant readiness conditions are genuinely not satisfied after the state wait, the firmware does **not** claim it is ready and logs an initialization-incomplete error. The `ready` line is intentionally the final startup health signal, not merely an ESP32 boot-complete message.
 
@@ -124,6 +139,10 @@ v1.0.23 fixes a readiness-log race observed while ESPHome Device Builder's live 
 
 The readiness check now runs through a `mode: single` script and immediately becomes a no-op once `ready_logged` is true. This preserves the authoritative readiness criteria while eliminating duplicate/spurious post-ready errors.
 
+### v1.0.24
+
+v1.0.24 adds Find Remote using the Sticky's GPIO48 buzzer. ESPHome LEDC drives the passive buzzer and RTTTL generates a repeating two-pitch locator pattern. The new Home Assistant switch is always restored off, local button/touch activity cancels it, and an active locator blocks automatic deep sleep until cancelled.
+
 ## Sticky hardware mapping
 
 | Function | GPIO |
@@ -147,19 +166,20 @@ The readiness check now runs through a `mode: single` script and immediately bec
 | PWR_HOLD | 45 |
 | PWR_LOCK | 46 |
 | E-paper EN | 47 |
+| Built-in buzzer PWM | 48 |
 
 The Sticky uses 32 MB flash and 8 MB octal PSRAM.
 
-## v1.0.23 validation checklist
+## v1.0.24 validation checklist
 
-1. Compile v1.0.23 and confirm the previous `%u` / `long unsigned int` `-Wformat` warning remains absent.
+1. Compile v1.0.24 and confirm the previous `%u` / `long unsigned int` `-Wformat` warning remains absent.
 2. Boot and confirm GT911 reports **Address: 0x5D** with no communication/calibration failure.
-3. Confirm the firmware does not log `ready` until Home Assistant is connected and the imported TV state has arrived.
-4. Confirm exactly one readiness line is emitted and it includes `1.0.23`.
-5. Open/close ESPHome Device Builder logs or otherwise connect additional API clients and confirm no post-ready `initialization incomplete` errors appear.
-6. Confirm awake touchscreen controls and **Last Touch X/Y** work.
-7. Turn the TV off and let the remote render the sleep screen.
-8. Confirm the remote's state-bearing ESPHome entities become **Unavailable** while asleep.
+3. Confirm exactly one readiness line is emitted and it includes `1.0.24`.
+4. Turn **Find Remote** on in Home Assistant and confirm the buzzer repeats an alternating-pitch pattern continuously.
+5. Turn **Find Remote** off in Home Assistant and confirm the buzzer stops immediately.
+6. Start Find Remote again, then press each physical button and a touchscreen control; confirm any local interaction cancels the locator while the normal remote action still executes.
+7. With the TV off, confirm an active Find Remote session prevents deep sleep; after cancelling it, confirm the normal sleep sequence resumes.
+8. Confirm the remote's state-bearing ESPHome entities, including Find Remote, become **Unavailable** while asleep.
 9. Wake with a brief AI / Power tap and confirm the shared Home Assistant TV-on script turns the TV on.
 10. Confirm the entities become available again, then confirm touchscreen and physical volume controls work.
 11. Repeat the sleep/wake/touch cycle several times.

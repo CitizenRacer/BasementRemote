@@ -1,14 +1,12 @@
 # Basement Remote Sticky firmware
 #
-# v1.0.23 makes the readiness check single-flight so transient API/log clients
-# cannot produce false initialization errors after the remote is already ready.
-# It keeps the v1.0.22 readiness timing, sleep availability behavior, corrected
-# GT911 0x5D configuration, and shared Home Assistant/Alexa TV-on path.
+# v1.0.24 adds the GPIO48 buzzer-backed Find Remote control while preserving
+# the v1.0.23 readiness, wake/touch, and sleep-availability behavior.
 
 substitutions:
   device_name: basement-remote-sticky
   friendly_name: Basement Remote Sticky
-  firmware_version: "1.0.23"
+  firmware_version: "1.0.24"
 
 packages:
   sticky_v1014_base:
@@ -64,6 +62,24 @@ i2c:
   - id: !extend touch_i2c
     scan: false
 
+# GPIO48 is the reTerminal Sticky's built-in passive buzzer. LEDC provides the
+# variable-frequency PWM required by the RTTTL tone generator.
+output:
+  - platform: ledc
+    id: buzzer_pwm
+    pin: GPIO48
+
+rtttl:
+  output: buzzer_pwm
+  on_finished_playback:
+    - if:
+        condition:
+          switch.is_on: find_remote
+        then:
+          # Repeat the alternating-pitch locator pattern until Find Remote is
+          # turned off in Home Assistant or local input cancels it.
+          - rtttl.play: 'find:d=8,o=6,b=180:a,p,e7,p,a,p,e7,p'
+
 # Replace only the inherited AI / Power binary sensor so the held-time log uses
 # a printf format that exactly matches the ESP32-S3 toolchain's argument type.
 binary_sensor:
@@ -115,6 +131,33 @@ globals:
     type: bool
     restore_value: false
     initial_value: "false"
+
+# Find Remote is intentionally a switch rather than a momentary button: turning
+# it on starts the locator sound and turning it off stops it. ALWAYS_OFF prevents
+# a reboot/wake from unexpectedly resuming the buzzer.
+switch:
+  - platform: template
+    id: find_remote
+    name: "Find Remote"
+    icon: "mdi:map-marker-sound"
+    optimistic: true
+    restore_mode: ALWAYS_OFF
+    turn_on_action:
+      - logger.log: "Find Remote enabled"
+      - rtttl.play: 'find:d=8,o=6,b=180:a,p,e7,p,a,p,e7,p'
+    turn_off_action:
+      - rtttl.stop:
+      - logger.log: "Find Remote disabled"
+      # If the TV is already off, return to the normal sleep path now that the
+      # locator no longer needs the radio/CPU to remain awake.
+      - if:
+          condition:
+            lambda: |-
+              return id(basement_tv_state).has_state() &&
+                     id(basement_tv_state).state == "off" &&
+                     !id(tv_wake_in_progress);
+          then:
+            - script.execute: enter_tv_off_sleep
 
 # Initialize after touch power restoration. 0x5D is the working GT911 address
 # confirmed by the production Sticky boot log.
@@ -215,6 +258,27 @@ script:
           then:
             - script.execute: enter_tv_off_sleep
 
+  # Replace the inherited sleep decision so an active Find Remote session keeps
+  # the Sticky awake and audible even if the TV is off. Turning Find Remote off
+  # schedules this sleep path again when appropriate.
+  - id: !remove enter_tv_off_sleep
+
+  - id: enter_tv_off_sleep
+    mode: restart
+    then:
+      - delay: 10s
+      - if:
+          condition:
+            and:
+              - switch.is_off: find_remote
+              - lambda: |-
+                  return id(basement_tv_state).has_state() &&
+                         id(basement_tv_state).state == "off" &&
+                         !id(tv_wake_in_progress);
+          then:
+            - logger.log: "Basement TV is off; entering remote deep sleep"
+            - script.execute: render_sleep_and_enter
+
   # Replace the inherited sleep-entry script. Wi-Fi is deliberately disabled
   # before deep_sleep.enter so Home Assistant sees an unexpected disconnect and
   # marks state-bearing ESPHome entities unavailable instead of retaining stale
@@ -264,3 +328,22 @@ script:
                 level: ERROR
                 format: "Deep-sleep recovery: Home Assistant did not become ready within 60 seconds"
             - lambda: 'id(tv_wake_in_progress) = false;'
+
+# Any local interaction dismisses Find Remote without consuming the user's
+# actual remote command. The inherited touch handler exposes touch_active, and
+# all three physical buttons are already binary sensors.
+interval:
+  - interval: 25ms
+    then:
+      - if:
+          condition:
+            and:
+              - switch.is_on: find_remote
+              - or:
+                  - binary_sensor.is_on: button_ai_power
+                  - binary_sensor.is_on: button_up
+                  - binary_sensor.is_on: button_down
+                  - lambda: 'return id(touch_active);'
+          then:
+            - logger.log: "Find Remote cancelled by local input"
+            - switch.turn_off: find_remote
