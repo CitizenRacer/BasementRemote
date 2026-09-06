@@ -6,7 +6,7 @@ Touchscreen e-paper TV remote firmware backed directly by Home Assistant over ES
 
 | Hardware | Firmware | Status |
 | --- | --- | --- |
-| Seeed Studio reTerminal Sticky | **v1.0.20** | Production target; current work focuses on reliable deep-sleep wake and GT911 recovery |
+| Seeed Studio reTerminal Sticky | **v1.0.21** | Production target; current work focuses on reliable deep-sleep wake and GT911 recovery |
 | M5Stack M5PaperMono Lite (C153-LITE) | **v0.1.0** | Initial bring-up / compile validated; hardware not yet available |
 
 The production Sticky source is [`esphome/basement-remote-sticky.yaml`](esphome/basement-remote-sticky.yaml). The PaperMono target remains separate.
@@ -80,17 +80,7 @@ All added manipulation of GPIO45/GPIO46/GPIO47 was removed, restoring the known-
 
 GT911 recovery was isolated from the board power latch. GPIO42 was retained HIGH through deep sleep to avoid cold-power-cycling the touchscreen. These versions also delayed touch setup and disabled the touch-bus scan.
 
-However, v1.0.18/v1.0.19 incorrectly forced the GT911 to **0x14**. Hardware logs from the production Sticky showed:
-
-```text
-GT911 Touchscreen:
-  Address: 0x14
-  Interrupt Pin: GPIO21
-  Reset Pin: GPIO41
-touchscreen is marked FAILED: Communication failed
-```
-
-That proved the driver was talking to the wrong address.
+However, v1.0.18/v1.0.19 incorrectly forced the GT911 to **0x14**. Hardware logs from the production Sticky showed an immediate `Communication failed` error at that address.
 
 ### v1.0.20
 
@@ -104,6 +94,14 @@ The other reliability behavior remains unchanged:
 - The touch I²C bus does not perform an unnecessary startup scan.
 - Deep-sleep wake waits for Home Assistant and calls `script.tv_turn_on_the_tv_cable`.
 - The deliberate sleep path drops Wi-Fi so entities are unavailable while asleep.
+
+### v1.0.21
+
+v1.0.21 makes **no intentional runtime behavior change**. It removes the remaining compile-time `-Wformat` warning from the inherited AI / Power button release logger.
+
+The v1.0.14 base logged a `uint32_t held_ms` with `%u`. Under the ESP32-S3 ESP-IDF toolchain used by ESPHome 2026.8.2, the compiler reports that argument as `long unsigned int`, so GCC warned that `%u` expected `unsigned int`.
+
+v1.0.21 replaces only that inherited binary-sensor definition and logs the value using `%lu` with an explicit `static_cast<unsigned long>(held_ms)`. Short-press/long-press thresholds and actions are unchanged. CI should therefore compile the Sticky with no instance of that format warning.
 
 ## Sticky hardware mapping
 
@@ -131,18 +129,17 @@ The other reliability behavior remains unchanged:
 
 The Sticky uses 32 MB flash and 8 MB octal PSRAM.
 
-## v1.0.20 validation checklist
+## v1.0.21 validation checklist
 
-1. Install v1.0.20 while the Sticky is awake.
+1. Compile/install v1.0.21 and confirm the prior `%u` / `long unsigned int` `-Wformat` warning is absent.
 2. Confirm the boot log reports **GT911 Address: 0x5D** with no `Communication failed` or `Calibration error`.
-3. Confirm awake touchscreen controls work before the first sleep cycle and **Last Touch X/Y** updates.
+3. Confirm awake touchscreen controls work and **Last Touch X/Y** updates.
 4. Turn the TV off and allow the remote to render the sleep screen.
 5. Confirm the Sticky's ESPHome entities change to **Unavailable** when Wi-Fi drops for sleep.
 6. Wake with a **brief tap** of AI / Power.
 7. Confirm `script.tv_turn_on_the_tv_cable` turns the TV on and the entities return from **Unavailable**.
-8. Immediately confirm D-pad, Select, Back, Home, playback, app launchers, and both physical volume buttons work.
-9. Repeat the TV-off → unavailable → sleep → brief-tap wake → available/touch-working cycle at least five times.
-10. Observe battery behavior before optimizing GT911 sleep current further.
+8. Confirm touchscreen controls and both physical volume buttons work after wake.
+9. Repeat the sleep/wake/touch cycle several times.
 
 # M5PaperMono Lite
 
