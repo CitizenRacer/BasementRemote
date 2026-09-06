@@ -6,7 +6,7 @@ Touchscreen e-paper TV remote firmware backed directly by Home Assistant over ES
 
 | Hardware | Firmware | Status |
 | --- | --- | --- |
-| Seeed Studio reTerminal Sticky | **v1.0.22** | Production target; wake, touch, readiness, and sleep availability hardening |
+| Seeed Studio reTerminal Sticky | **v1.0.23** | Production target; wake, touch, readiness, and sleep availability hardening |
 | M5Stack M5PaperMono Lite (C153-LITE) | **v0.1.0** | Initial bring-up / compile validated; hardware not yet available |
 
 The production Sticky source is [`esphome/basement-remote-sticky.yaml`](esphome/basement-remote-sticky.yaml). The PaperMono target remains separate.
@@ -75,7 +75,7 @@ Ordinary OTA updates and reboots still use normal ESPHome shutdown behavior; onl
 Beginning with v1.0.22, the old early boot `ready` message is removed. The firmware emits exactly one readiness line per boot:
 
 ```text
-Basement Remote firmware 1.0.22 ready
+Basement Remote firmware 1.0.23 ready
 ```
 
 That line is emitted only after:
@@ -86,7 +86,9 @@ That line is emitted only after:
 - a Home Assistant state-subscribing client is present; and
 - `TV State Seen By Remote` has received a real state instead of `unknown`/`unavailable`.
 
-If those conditions are not satisfied, the firmware does **not** claim it is ready and instead logs an initialization-incomplete error. The `ready` line is intentionally the final startup health signal, not merely an ESP32 boot-complete message.
+v1.0.23 additionally serializes readiness checks through a `mode: single` script. ESPHome Device Builder's live logger and other transient API clients can still fire `on_client_connected`, but they can no longer race the Home Assistant readiness check or emit a false `initialization incomplete` error after `ready` has already been logged. Once `ready` has been emitted, later client connections are intentionally silent.
+
+If the Home Assistant readiness conditions are genuinely not satisfied after the state wait, the firmware does **not** claim it is ready and logs an initialization-incomplete error. The `ready` line is intentionally the final startup health signal, not merely an ESP32 boot-complete message.
 
 ## Wake/touch reliability history
 
@@ -116,6 +118,12 @@ v1.0.22 keeps the working `0x5D` GT911 configuration and board-latch behavior, a
 
 Implementation detail: the production package explicitly removes the inherited v1.0.14 `on_boot` automation and recreates only its required power/display sequencing, which guarantees the obsolete early `ready` logger cannot also fire.
 
+### v1.0.23
+
+v1.0.23 fixes a readiness-log race observed while ESPHome Device Builder's live logger was attached. Any API client can trigger `on_client_connected`; in v1.0.22, a second client connection after a valid `ready` could fall into the readiness check's `else` branch and log `Basement Remote initialization incomplete; not reporting ready` even though initialization had already succeeded.
+
+The readiness check now runs through a `mode: single` script and immediately becomes a no-op once `ready_logged` is true. This preserves the authoritative readiness criteria while eliminating duplicate/spurious post-ready errors.
+
 ## Sticky hardware mapping
 
 | Function | GPIO |
@@ -142,18 +150,19 @@ Implementation detail: the production package explicitly removes the inherited v
 
 The Sticky uses 32 MB flash and 8 MB octal PSRAM.
 
-## v1.0.22 validation checklist
+## v1.0.23 validation checklist
 
-1. Compile v1.0.22 and confirm the previous `%u` / `long unsigned int` `-Wformat` warning is absent.
+1. Compile v1.0.23 and confirm the previous `%u` / `long unsigned int` `-Wformat` warning remains absent.
 2. Boot and confirm GT911 reports **Address: 0x5D** with no communication/calibration failure.
 3. Confirm the firmware does not log `ready` until Home Assistant is connected and the imported TV state has arrived.
-4. Confirm the readiness line includes the exact firmware version.
-5. Confirm awake touchscreen controls and **Last Touch X/Y** work.
-6. Turn the TV off and let the remote render the sleep screen.
-7. Confirm the remote's state-bearing ESPHome entities become **Unavailable** while asleep.
-8. Wake with a brief AI / Power tap and confirm the shared Home Assistant TV-on script turns the TV on.
-9. Confirm the entities become available again, then confirm touchscreen and physical volume controls work.
-10. Repeat the sleep/wake/touch cycle several times.
+4. Confirm exactly one readiness line is emitted and it includes `1.0.23`.
+5. Open/close ESPHome Device Builder logs or otherwise connect additional API clients and confirm no post-ready `initialization incomplete` errors appear.
+6. Confirm awake touchscreen controls and **Last Touch X/Y** work.
+7. Turn the TV off and let the remote render the sleep screen.
+8. Confirm the remote's state-bearing ESPHome entities become **Unavailable** while asleep.
+9. Wake with a brief AI / Power tap and confirm the shared Home Assistant TV-on script turns the TV on.
+10. Confirm the entities become available again, then confirm touchscreen and physical volume controls work.
+11. Repeat the sleep/wake/touch cycle several times.
 
 # M5PaperMono Lite
 

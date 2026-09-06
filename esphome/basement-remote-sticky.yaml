@@ -1,14 +1,14 @@
 # Basement Remote Sticky firmware
 #
-# v1.0.22 makes the readiness log authoritative, removes the inherited printf
-# warning, keeps the corrected GT911 0x5D configuration, uses the shared Home
-# Assistant/Alexa TV-on path, and deliberately makes state-bearing HA entities
-# unavailable while the remote is asleep.
+# v1.0.23 makes the readiness check single-flight so transient API/log clients
+# cannot produce false initialization errors after the remote is already ready.
+# It keeps the v1.0.22 readiness timing, sleep availability behavior, corrected
+# GT911 0x5D configuration, and shared Home Assistant/Alexa TV-on path.
 
 substitutions:
   device_name: basement-remote-sticky
   friendly_name: Basement Remote Sticky
-  firmware_version: "1.0.22"
+  firmware_version: "1.0.23"
 
 packages:
   sticky_v1014_base:
@@ -123,40 +123,14 @@ touchscreen:
     setup_priority: 500
     address: 0x5D
 
+# Any API client can fire on_client_connected, including ESPHome Device Builder's
+# live logger. Funnel those events through a mode: single script so only one
+# readiness evaluation can be in flight at a time. Once ready_logged is true,
+# later client connections are intentionally silent.
 api:
   id: remote_api
   on_client_connected:
-    - delay: 2s
-    - if:
-        condition:
-          api.connected:
-            state_subscription_only: true
-        then:
-          # A connected API socket is not enough: wait until Home Assistant has
-          # delivered the imported TV state before declaring the remote ready.
-          - wait_until:
-              condition:
-                lambda: |-
-                  return id(basement_tv_state).has_state() &&
-                         id(basement_tv_state).state != "unknown" &&
-                         id(basement_tv_state).state != "unavailable";
-              timeout: 15s
-          - if:
-              condition:
-                lambda: |-
-                  return !id(ready_logged) &&
-                         id(basement_tv_state).has_state() &&
-                         id(basement_tv_state).state != "unknown" &&
-                         id(basement_tv_state).state != "unavailable" &&
-                         !id(sticky_touch).is_failed() &&
-                         !id(epaper_display).is_failed();
-              then:
-                - logger.log: "Basement Remote firmware ${firmware_version} ready"
-                - lambda: 'id(ready_logged) = true;'
-              else:
-                - logger.log:
-                    level: ERROR
-                    format: "Basement Remote initialization incomplete; not reporting ready"
+    - script.execute: report_ready_after_init
 
 # Keep the v1.0.14 GPIO4 wake source and board-latch behavior. Add the slower HA
 # recovery path for reconnects that take longer than the first wake automation.
@@ -165,6 +139,45 @@ deep_sleep:
     - script.execute: wake_tv_after_reconnect
 
 script:
+  - id: report_ready_after_init
+    mode: single
+    then:
+      - if:
+          condition:
+            lambda: 'return !id(ready_logged);'
+          then:
+            - delay: 2s
+            - if:
+                condition:
+                  api.connected:
+                    state_subscription_only: true
+                then:
+                  # A connected API socket is not enough: wait until Home
+                  # Assistant has delivered the imported TV state before
+                  # declaring the remote ready.
+                  - wait_until:
+                      condition:
+                        lambda: |-
+                          return id(basement_tv_state).has_state() &&
+                                 id(basement_tv_state).state != "unknown" &&
+                                 id(basement_tv_state).state != "unavailable";
+                      timeout: 15s
+                  - if:
+                      condition:
+                        lambda: |-
+                          return id(basement_tv_state).has_state() &&
+                                 id(basement_tv_state).state != "unknown" &&
+                                 id(basement_tv_state).state != "unavailable" &&
+                                 !id(sticky_touch).is_failed() &&
+                                 !id(epaper_display).is_failed();
+                      then:
+                        - logger.log: "Basement Remote firmware ${firmware_version} ready"
+                        - lambda: 'id(ready_logged) = true;'
+                      else:
+                        - logger.log:
+                            level: ERROR
+                            format: "Basement Remote initialization incomplete; not reporting ready"
+
   # Awake short presses and deep-sleep wake both use the same authoritative
   # Home Assistant TV-on script used by Alexa.
   - id: !remove wake_tv_after_power_button
