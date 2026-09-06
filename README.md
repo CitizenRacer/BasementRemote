@@ -6,7 +6,7 @@ Touchscreen e-paper TV remote firmware backed directly by Home Assistant over ES
 
 | Hardware | Firmware | Status |
 | --- | --- | --- |
-| Seeed Studio reTerminal Sticky | **v1.0.16** | Production / hardware validated through v1.0.14; v1.0.16 wake/touch recovery pending deployment validation |
+| Seeed Studio reTerminal Sticky | **v1.0.17** | Production / hardware validated through v1.0.14; v1.0.17 wake/touch recovery pending deployment validation |
 | M5Stack M5PaperMono Lite (C153-LITE) | **v0.1.0** | Initial bring-up / compile validated; hardware not yet available |
 
 The production Sticky source is [`esphome/basement-remote-sticky.yaml`](esphome/basement-remote-sticky.yaml). The PaperMono target is separate and does not replace Sticky hardware configuration.
@@ -72,7 +72,7 @@ All awake UI artwork is repository-owned under [`assets/`](assets/). The interfa
 | --- | --- |
 | AI / Power while awake, short press | Apple TV `wakeup` |
 | AI / Power while awake, hold ≥ 800 ms | Apple TV `suspend` |
-| AI / Power while asleep | Wake the Sticky; the recovery path calls `script.tv_turn_on_the_tv_cable` after Home Assistant reconnects |
+| AI / Power while asleep | Wake using the v1.0.14 hardware latch sequence; recovery then calls `script.tv_turn_on_the_tv_cable` after Home Assistant reconnects |
 | Upper side button | Apple TV `volume_up` |
 | Lower side button | Apple TV `volume_down` |
 
@@ -86,33 +86,31 @@ The Sticky uses ESPHome's integrated `Seeed-reTerminal-Sticky` SSD1677 display m
 
 The sleep artwork is [`assets/sleep-screen.svg`](assets/sleep-screen.svg). GPIO4, the physical AI / Power button, is the only configured ESP32 deep-sleep wake source.
 
-## v1.0.15 wake/recovery hardening
+## Wake/recovery history
 
-v1.0.15 addressed two observed wake regressions from v1.0.14:
+v1.0.15 attempted to harden two observed wake regressions from v1.0.14: a TV-on command that could be lost during a slow Home Assistant reconnect and a GT911 touchscreen that could remain dead after wake. It added a longer reconnect path and an early priority-1150 GPIO recovery step.
 
-1. **TV wake command could be lost during API reconnect.** A real wake showed that reconnect can take longer than the old 20-second wait, and an authenticated ESPHome API connection can exist before Home Assistant has finished subscribing to device actions.
-2. **GT911 touch could remain dead after wake.** Home Assistant showed the Sticky back online while **Last Touch X/Y** remained `unknown`, indicating that the touchscreen itself had not recovered.
+Hardware testing exposed a more serious regression: a normal short AI-button press could fail to wake the Sticky, while **holding the AI button down did wake it**. That behavior shows that the physical wake input still worked, but the button had to be held long enough to keep the board powered until firmware took over the power latch. The early recovery step had released retained `PWR_HOLD` / `PWR_LOCK` related GPIOs before the known-good v1.0.14 latch sequence reasserted them, creating a power-latch gap during wake.
 
-The recovery layer therefore adds:
+v1.0.16 changed the reconnect recovery action to call `script.tv_turn_on_the_tv_cable`, the same TV-on sequence used by Alexa, but it still inherited the risky early latch override.
 
-- a second idempotent deep-sleep recovery path that waits up to 60 seconds for a Home Assistant state-subscribing API client;
-- an additional 2-second grace period before issuing the recovery Home Assistant action;
-- a wake interlock that remains asserted while the TV/LG state converges;
-- an early boot recovery step at priority 1150 that releases retained deep-sleep GPIO holds before normal touch power setup;
-- a guaranteed GT911 cold power cycle on GPIO42: 25 ms off, then 150 ms powered before the normal ESPHome GT911 initialization sequence;
-- explicit recovery logging for the touch power cycle, HA subscription readiness, and recovery TV-on action.
+## v1.0.17 wake fix
 
-The v1.0.14 fast wake path remains as an early best-effort path. The longer recovery path is the authoritative path for surviving a slow Home Assistant reconnect.
+v1.0.17 removes that risky override completely:
 
-## v1.0.16 shared TV-on path
+- the complete v1.0.14 GPIO45/GPIO46/GPIO47 wake/latch sequence is left untouched;
+- no extra boot hook releases or manipulates `PWR_HOLD`, `PWR_LOCK`, or the e-paper power rail;
+- GT911 recovery is isolated to **GPIO42 only**, after the v1.0.14 priority-900 wake code has restored the retained rails;
+- GPIO42 is cold-cycled for 25 ms off / 150 ms on before normal GT911 setup;
+- the secondary reconnect path still waits up to 60 seconds for Home Assistant and then calls `script.tv_turn_on_the_tv_cable` after a 2-second subscription grace period.
 
-v1.0.16 keeps the v1.0.15 GT911 and reconnect hardening but changes the authoritative deep-sleep recovery action. Instead of sending another raw Apple TV `wakeup` command, it calls Home Assistant `script.tv_turn_on_the_tv_cable`, the same TV-on sequence used by Alexa. This keeps the proven Home Assistant power-on logic in one place and lets that script own any Wake-on-LAN, Apple TV, HDMI-CEC, or other sequencing it needs.
+The design rule going forward is that touch recovery must never alter the known-good Sticky power-latch timing.
 
-### v1.0.16 implementation note
+### v1.0.17 implementation note
 
-To keep the recovery delta small and auditable, `esphome/basement-remote-sticky.yaml` imports the last hardware-validated v1.0.14 production file from commit `dc4113e58f1b3d96a08825d5e63aadbaac05603b` and layers the current recovery configuration on top using ESPHome packages. Main-file substitutions override the base version to `1.0.16`.
+`esphome/basement-remote-sticky.yaml` imports the last hardware-validated v1.0.14 production file from commit `dc4113e58f1b3d96a08825d5e63aadbaac05603b` and layers only the isolated v1.0.17 recovery behavior on top. Main-file substitutions override the base version to `1.0.17`.
 
-This layering is deliberate: the complete v1.0.14 UI, control mappings, assets, battery telemetry, and sleep implementation remain frozen while the wake/touch fix is validated on hardware.
+This keeps the complete v1.0.14 UI, control mappings, wake pin, battery telemetry, assets, sleep implementation, and latch sequencing frozen while the touch/reconnect changes are validated.
 
 ## Sticky hardware mapping
 
@@ -142,16 +140,17 @@ The Sticky uses 32 MB flash and 8 MB octal PSRAM.
 
 ## Sticky validation checklist
 
-After deploying v1.0.16, validate in this order:
+After deploying v1.0.17, validate in this order:
 
-1. With the TV off and the sleep face visible, press the AI / Power button once.
-2. Confirm the Sticky wakes and the TV powers on without a second press through the shared `script.tv_turn_on_the_tv_cable` path.
-3. Confirm **Last Touch X/Y** changes immediately when the screen is touched after wake.
-4. Confirm D-pad, Select, Back, Home, playback, and all app launchers work.
-5. Confirm both physical volume buttons work and repeat when held.
-6. Turn the TV off using a long AI / Power press and confirm the remote returns to the sleep face.
-7. Repeat the sleep/wake cycle several times to verify GT911 recovery is consistent.
-8. Confirm battery level, voltage, current, and charging state remain plausible.
+1. With the TV off and the sleep face visible, **briefly tap** the AI / Power button; do not hold it.
+2. Confirm the Sticky itself wakes and remains powered. This specifically verifies the v1.0.16 latch regression is gone.
+3. Confirm the TV powers on without a second press through `script.tv_turn_on_the_tv_cable`.
+4. Confirm **Last Touch X/Y** changes immediately when the screen is touched after wake.
+5. Confirm D-pad, Select, Back, Home, playback, and all app launchers work.
+6. Confirm both physical volume buttons work and repeat when held.
+7. Turn the TV off using a long AI / Power press and confirm the remote returns to the sleep face.
+8. Repeat the short-press sleep/wake cycle several times to verify both latch and GT911 recovery are consistent.
+9. Confirm battery level, voltage, current, and charging state remain plausible.
 
 # M5PaperMono Lite
 
