@@ -1,16 +1,16 @@
 # Basement Remote Sticky firmware
 #
-# v1.0.18 preserves the hardware-validated v1.0.14 board power-latch sequence,
-# keeps the shared Home Assistant/Alexa TV-on recovery path, and fixes the GT911
-# wake failure without cold-power-cycling the touchscreen on every deep-sleep
-# transition.
+# v1.0.19 preserves the v1.0.18 wake/touch work and intentionally makes the
+# ESPHome API connection disappear before entering deep sleep so Home Assistant
+# marks the remote's entities unavailable while the board is asleep. Normal
+# boot reconnects Wi-Fi/API and restores entity availability automatically.
 #
 # This file is the production package consumed by Device Builder.
 
 substitutions:
   device_name: basement-remote-sticky
   friendly_name: Basement Remote Sticky
-  firmware_version: "1.0.18"
+  firmware_version: "1.0.19"
 
 packages:
   sticky_v1014_base:
@@ -45,7 +45,7 @@ esphome:
   on_boot:
     - priority: -110
       then:
-        - logger.log: "Basement Remote v1.0.18 touch recovery initialization complete"
+        - logger.log: "Basement Remote v1.0.19 initialization complete"
 
 # Do not scan the GT911 bus during startup. The controller is known and has a
 # dedicated bus; eliminating the scan removes an unnecessary transaction before
@@ -56,8 +56,7 @@ i2c:
 
 # Initialize the GT911 only after the v1.0.14 priority-600 action has restored
 # the touch switch. The Sticky's controller uses 0x14. Supplying its known raw
-# dimensions also avoids the driver's separate startup calibration-register read,
-# another point where the current ESPHome GT911 driver can mark itself failed.
+# dimensions also avoids the driver's separate startup calibration-register read.
 touchscreen:
   - id: !extend sticky_touch
     setup_priority: 500
@@ -89,6 +88,25 @@ deep_sleep:
     - script.execute: wake_tv_after_reconnect
 
 script:
+  # Replace the v1.0.14 sleep-entry script so Wi-Fi is disabled immediately
+  # before deep sleep. ESPHome normally performs a graceful API disconnect when
+  # entering deep sleep; Home Assistant deliberately retains entity availability
+  # for that case. Dropping Wi-Fi first makes the disconnect unexpected, so HA
+  # marks all ESPHome entities unavailable until the next boot reconnects.
+  - id: !remove render_sleep_and_enter
+
+  - id: render_sleep_and_enter
+    mode: restart
+    then:
+      - logger.log: "Rendering approved sleep face"
+      - lambda: 'id(sleep_display_active) = true;'
+      - component.update: epaper_display
+      - delay: 10s
+      - logger.log: "Sleep face rendered; dropping Wi-Fi so HA marks entities unavailable"
+      - wifi.disable:
+      - delay: 1s
+      - deep_sleep.enter: tv_power_sleep
+
   - id: wake_tv_after_reconnect
     mode: restart
     then:
