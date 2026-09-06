@@ -2,14 +2,14 @@
 
 Touchscreen e-paper TV remote firmware backed directly by Home Assistant over ESPHome's encrypted native API.
 
-This repository supports two hardware targets:
+## Targets
 
 | Hardware | Firmware | Status |
 | --- | --- | --- |
-| Seeed Studio reTerminal Sticky | **v1.0.14** | Production / hardware validated |
-| M5Stack M5PaperMono Lite (C153-LITE) | **v0.1.0** | Initial bring-up / compile validated, hardware not yet available |
+| Seeed Studio reTerminal Sticky | **v1.0.15** | Production / hardware validated through v1.0.14; v1.0.15 wake recovery pending deployment validation |
+| M5Stack M5PaperMono Lite (C153-LITE) | **v0.1.0** | Initial bring-up / compile validated; hardware not yet available |
 
-The production Sticky source remains [`esphome/basement-remote-sticky.yaml`](esphome/basement-remote-sticky.yaml). Adding the PaperMono target does not replace or modify the Sticky hardware configuration.
+The production Sticky source is [`esphome/basement-remote-sticky.yaml`](esphome/basement-remote-sticky.yaml). The PaperMono target is separate and does not replace Sticky hardware configuration.
 
 <p align="center">
   <img src="docs/remote.jpg" alt="Seeed Studio reTerminal Sticky running the Basement Remote interface" width="420">
@@ -17,7 +17,7 @@ The production Sticky source remains [`esphome/basement-remote-sticky.yaml`](esp
 
 ## Architecture
 
-Both targets are front ends for the existing Home Assistant **Basement Remote** setup. They use the same Home Assistant entities and actions rather than introducing a second remote-control architecture.
+Both targets are front ends for the existing Home Assistant **Basement Remote** setup:
 
 ```text
 Touchscreen / physical buttons
@@ -29,71 +29,87 @@ Home Assistant actions
 Apple TV / HDMI-CEC / LG TV
 ```
 
-The firmware does not use `automation.remote_navigation_2` or `esphome.remote_button_pressed` as its control plane.
+The remote intentionally uses the same Home Assistant entities and actions as the working dashboard rather than introducing a parallel control architecture.
 
-## Home Assistant dependencies
-
-Both targets directly depend on:
+### Home Assistant dependencies
 
 - `remote.basement_apple_tv` — navigation, transport, power, and volume commands
-- `media_player.basement_apple_tv` — streaming-service app launchers via `media_player.select_source`
-- `media_player.basement_tv` — imported as **TV State Seen By Remote**; on the Sticky this is also the authority for automatic deep sleep
+- `media_player.basement_apple_tv` — streaming-service app launchers
+- `media_player.basement_tv` — imported as **TV State Seen By Remote** and used as the Sticky's sleep authority
 
-For the ESPHome integration, Home Assistant must have **Allow the device to perform Home Assistant actions** enabled.
+For the ESPHome integration, **Allow the device to perform Home Assistant actions** must be enabled.
 
-## Shared touchscreen controls
+## Shared touchscreen layout
 
 Both targets use the same 480×800 portrait awake layout:
 
-1. Large D-pad and Select
+1. D-pad and Select
 2. Back and Home
 3. Playback controls
 4. Hulu, HBO Max, Disney+, and Paramount+ launchers
 
-| Touch control | Behavior |
+| Control | Behavior |
 | --- | --- |
 | D-pad | `up`, `down`, `left`, `right`, `select` |
 | Back | Apple TV `menu` |
 | Home | Apple TV `home` |
-| Playback row | `skip_backward`, `play`, `pause`, `skip_forward` |
-| Hulu launcher | Select Apple TV source `Hulu` |
-| HBO Max launcher | Select Apple TV source `HBO Max` |
-| Disney+ launcher | Select Apple TV source `Disney+` |
-| Paramount+ launcher | Select Apple TV source `Paramount+` |
+| Playback | `skip_backward`, `play`, `pause`, `skip_forward` |
+| Hulu | Select source `Hulu` |
+| HBO Max | Select source `HBO Max` |
+| Disney+ | Select source `Disney+` |
+| Paramount+ | Select source `Paramount+` |
 
 D-pad hold-to-repeat fires immediately, begins repeating after 500 ms, and repeats every 175 ms while held.
 
-All UI artwork is stored under [`assets/`](assets/). The awake controls use vendored Heroicons v2.2.0 SVGs and repository-owned streaming-service artwork. Firmware references those assets through this repository's raw GitHub paths so a Git-backed ESPHome package does not depend on third-party artwork hosts.
+All awake UI artwork is repository-owned under [`assets/`](assets/). The interface uses vendored Heroicons plus local streaming-service artwork so builds do not depend on third-party asset hosts.
 
-## reTerminal Sticky target
+# reTerminal Sticky
 
-The Sticky remains the production remote and is intentionally isolated in [`esphome/basement-remote-sticky.yaml`](esphome/basement-remote-sticky.yaml).
-
-### Sticky physical controls
+## Physical controls
 
 | Control | Behavior |
 | --- | --- |
 | AI / Power while awake, short press | Apple TV `wakeup` |
 | AI / Power while awake, hold ≥ 800 ms | Apple TV `suspend` |
-| AI / Power while in TV-off deep sleep | Wake the Sticky and queue Apple TV `wakeup` as soon as the ESPHome native API reconnects |
+| AI / Power while asleep | Wake the Sticky and wake the Apple TV after Home Assistant reconnects |
 | Upper side button | Apple TV `volume_up` |
 | Lower side button | Apple TV `volume_down` |
 
-The deep-sleep wake press is intentionally not reclassified on button release. One physical press therefore cannot both wake the remote and later be interpreted as a second, conflicting power command. The two volume buttons support the same 500 ms / 175 ms hold-to-repeat behavior as the D-pad.
+The two volume buttons use the same 500 ms / 175 ms hold-to-repeat behavior as the D-pad.
 
-### Sticky display and sleep behavior
+## Display and sleep behavior
 
-The Sticky uses ESPHome's integrated `Seeed-reTerminal-Sticky` SSD1677 display model with a 480×800 logical portrait UI. While awake, it performs a full e-paper refresh every 10 minutes and on explicit **Refresh E-Paper** requests. Navigation and media commands do not refresh the screen.
+The Sticky uses ESPHome's integrated `Seeed-reTerminal-Sticky` SSD1677 display model with a 480×800 portrait UI. While awake it performs a full refresh every 10 minutes and on explicit **Refresh E-Paper** requests. Normal navigation/media actions do not refresh the screen.
 
-`media_player.basement_tv` is the authority for the automatic awake/asleep lifecycle. When Home Assistant reports exactly `off`, the firmware debounces the state for 10 seconds, renders the approved sleep face, waits for the asynchronous full refresh to complete, and enters indefinite ESP32 deep sleep.
+`media_player.basement_tv` is the authority for automatic sleep. When Home Assistant reports exactly `off`, firmware debounces the state for 10 seconds, renders the approved sleep face, waits for the asynchronous refresh to finish, and enters indefinite ESP32 deep sleep.
 
-The sleep artwork is [`assets/sleep-screen.svg`](assets/sleep-screen.svg). The e-paper image remains visible while the ESP32 is asleep. GPIO4, the physical AI / Power button, is the only deep-sleep wake source.
+The sleep artwork is [`assets/sleep-screen.svg`](assets/sleep-screen.svg). GPIO4, the physical AI / Power button, is the only configured ESP32 deep-sleep wake source.
 
-GPIO42 powers the GT911 touchscreen. It is shut off and held low during deep sleep to minimize battery use. On wake, firmware now releases that hold and drives GPIO42 high before the GT911 startup reset/calibration sequence runs; this prevents the touchscreen from being left failed after a deep-sleep boot. The same deep-sleep wake event starts the TV-wake script immediately, which waits for the Home Assistant API connection and then sends the Apple TV `wakeup` command.
+## v1.0.15 wake/recovery hardening
 
-The Sticky exposes TI BQ27220 battery level, voltage, signed current, and charging state. A low-battery glyph is displayed when state of charge is 20% or less.
+v1.0.15 addresses two observed wake regressions from v1.0.14:
 
-### Sticky hardware mapping
+1. **TV wake command could be lost during API reconnect.** Home Assistant logged an ESPHome encrypted-handshake failure during a real wake and the reconnect took longer than the old 20-second wait. ESPHome also documents that Home Assistant actions sent immediately after an API connection can be dropped before Home Assistant finishes subscribing to device actions.
+2. **GT911 touch could remain dead after wake.** Home Assistant showed the Sticky back online while **Last Touch X/Y** remained `unknown`, confirming that the touchscreen itself had not recovered.
+
+v1.0.15 therefore adds:
+
+- a second idempotent deep-sleep recovery path that waits up to 60 seconds for a Home Assistant state-subscribing API client;
+- an additional 2-second grace period before sending the Apple TV `wakeup` action so Home Assistant has time to register the action subscription;
+- a wake interlock that remains asserted while HDMI-CEC/LG state converges;
+- an early boot recovery step at priority 1150 that releases retained deep-sleep GPIO holds before normal touch power setup;
+- a guaranteed GT911 cold power cycle on GPIO42: 25 ms off, then 150 ms powered before the normal ESPHome GT911 initialization sequence;
+- explicit recovery logging for the touch power cycle, HA subscription readiness, and recovery wake command.
+
+The original v1.0.14 wake path remains in place. The new wake command is intentionally idempotent: sending Apple TV `wakeup` twice is safer than allowing a slow reconnect to lose the only wake request.
+
+### v1.0.15 implementation note
+
+To keep the recovery delta small and auditable, `esphome/basement-remote-sticky.yaml` currently imports the last hardware-validated v1.0.14 production file from commit `dc4113e58f1b3d96a08825d5e63aadbaac05603b` and layers the v1.0.15 recovery configuration on top using ESPHome packages. Main-file substitutions override the base version to `1.0.15`.
+
+This layering is deliberate: the complete v1.0.14 UI, control mappings, assets, battery telemetry, and sleep implementation remain frozen while the wake/touch fix is validated on hardware.
+
+## Sticky hardware mapping
 
 | Function | GPIO |
 | --- | ---: |
@@ -117,114 +133,81 @@ The Sticky exposes TI BQ27220 battery level, voltage, signed current, and chargi
 | PWR_LOCK | 46 |
 | E-paper EN | 47 |
 
-The Sticky uses 32 MB flash and 8 MB octal PSRAM. Its production firmware is v1.0.14. The PaperMono target remains separate so changes for that board cannot silently replace Sticky GPIO, power, touch, display, or wake behavior.
+The Sticky uses 32 MB flash and 8 MB octal PSRAM.
 
-## M5PaperMono Lite target
+## Sticky validation checklist
 
-The M5 target is [`esphome/basement-remote-papermono-lite.yaml`](esphome/basement-remote-papermono-lite.yaml). It imports the hardware package from:
+After deploying v1.0.15, validate in this order:
 
-`https://github.com/CitizenRacer/M5PaperMonoLite`
+1. With the TV off and the sleep face visible, press the AI / Power button once.
+2. Confirm the Sticky wakes and the Apple TV/TV powers on without a second press.
+3. Confirm **Last Touch X/Y** changes immediately when the screen is touched after wake.
+4. Confirm D-pad, Select, Back, Home, playback, and all app launchers work.
+5. Confirm both physical volume buttons work and repeat when held.
+6. Turn the TV off using a long AI / Power press and confirm the remote returns to the sleep face.
+7. Repeat the sleep/wake cycle several times to verify GT911 recovery is consistent.
+8. Confirm battery level, voltage, current, and charging state remain plausible.
 
-The BasementRemote repository intentionally does **not** duplicate PaperMono hardware initialization. The dependency owns ESP32-S3/PSRAM configuration, M5PM1, M5IOE1, SSD1677 setup, FT6336G touch power/reset/calibration, frontlight PWM, and battery-voltage telemetry. BasementRemote extends the package's `m5_display` and `m5_touch` IDs with the remote UI and hit regions.
+# M5PaperMono Lite
 
-### PaperMono physical controls
+The PaperMono target is [`esphome/basement-remote-papermono-lite.yaml`](esphome/basement-remote-papermono-lite.yaml) and imports its board support from `CitizenRacer/M5PaperMonoLite`.
+
+Its initial bring-up intentionally stays awake. PMIC-managed system-power-button handling and automatic TV-off sleep are deferred until real C153-LITE hardware is available for validation.
 
 | Control | Behavior |
 | --- | --- |
-| User button on GPIO2 | Apple TV `volume_up` |
-| User button on GPIO3 | Apple TV `volume_down` |
-| Touchscreen | Same navigation, transport, and launcher layout as Sticky |
-| Home Assistant **TV Power On** button | Apple TV `wakeup` |
-| Home Assistant **TV Power Off** button | Apple TV `suspend` |
-| Home Assistant **Refresh E-Paper** button | Request a display refresh |
-| Home Assistant **Frontlight** light | M5PM1-controlled frontlight brightness |
+| GPIO2 user button | Apple TV `volume_up` |
+| GPIO3 user button | Apple TV `volume_down` |
+| Touchscreen | Same navigation/media/app layout as Sticky |
+| Home Assistant **TV Power On** | Apple TV `wakeup` |
+| Home Assistant **TV Power Off** | Apple TV `suspend` |
+| Home Assistant **Refresh E-Paper** | Refresh display |
+| Home Assistant **Frontlight** | PMIC-controlled frontlight |
 
-The two physical volume buttons support tap and hold-to-repeat.
+# ESPHome Device Builder
 
-### Deliberate first-bring-up limitations
+Device Builder should remain only a small secret-bearing wrapper. The complete device behavior belongs in GitHub.
 
-The PaperMono target currently stays awake. Automatic TV-off deep sleep and use of the PMIC-managed physical system power button are intentionally deferred until the M5PM1 power-button IRQ/wake path has been validated on real C153-LITE hardware. This avoids copying the Sticky's unrelated GPIO wake/latch logic onto different hardware and risking an un-wakeable device.
+- Sticky wrapper example: [`esphome/device-builder-wrapper.example.yaml`](esphome/device-builder-wrapper.example.yaml)
+- PaperMono wrapper example: [`esphome/device-builder-wrapper-papermono-lite.example.yaml`](esphome/device-builder-wrapper-papermono-lite.example.yaml)
+- Secret names: [`esphome/secrets.example.yaml`](esphome/secrets.example.yaml)
 
-The PaperMono hardware package currently provides monochrome full-refresh support. Partial refresh and four-level grayscale are future hardware-package work and are not prerequisites for the remote UI.
+Real Wi-Fi credentials, OTA passwords, and the ESPHome API encryption key must never be committed.
 
-The support package exposes **Battery Voltage** and **Frontlight**. Battery percentage/charging-state UI is not synthesized from voltage because that would be less reliable than actual fuel-gauge telemetry.
-
-## ESPHome Device Builder
-
-Keep Device Builder as a small secret-bearing wrapper. The complete firmware remains in GitHub.
-
-### reTerminal Sticky
-
-Use [`esphome/device-builder-wrapper.example.yaml`](esphome/device-builder-wrapper.example.yaml).
-
-### M5PaperMono Lite
-
-Use [`esphome/device-builder-wrapper-papermono-lite.example.yaml`](esphome/device-builder-wrapper-papermono-lite.example.yaml).
-
-For either device, ensure the keys from [`esphome/secrets.example.yaml`](esphome/secrets.example.yaml) exist in Device Builder's local `secrets.yaml`. Real Wi-Fi credentials, OTA passwords, and the ESPHome API encryption key must never be committed to this repository.
-
-## Repository layout
+# Repository layout
 
 ```text
 .github/workflows/
-  esphome.yml                                      # validates and compiles both hardware targets
+  esphome.yml
 assets/
-  README.md                                        # asset provenance/build notes
   disney-d.png
   hbo-max.svg
   hulu.svg
   paramount-plus.svg
-  sleep-screen.svg                                # Sticky deep-sleep artwork
-  vendor/
-    heroicons-v2.2.0/
+  sleep-screen.svg
+  vendor/heroicons-v2.2.0/
 docs/
-  remote.jpg                                      # production Sticky photo
+  remote.jpg
 esphome/
-  basement-remote-sticky.yaml                     # production Sticky firmware, v1.0.14
-  basement-remote-papermono-lite.yaml             # PaperMono Lite firmware, v0.1.0
-  device-builder-wrapper.example.yaml             # Sticky Device Builder wrapper
+  basement-remote-sticky.yaml
+  basement-remote-papermono-lite.yaml
+  device-builder-wrapper.example.yaml
   device-builder-wrapper-papermono-lite.example.yaml
   secrets.example.yaml
 README.md
 ```
 
-## Building and CI
+# Building and CI
 
-Both targets require ESPHome 2026.8.2 or newer.
+Both targets require ESPHome 2026.8.2 or newer. `.github/workflows/esphome.yml` validates and compiles the Sticky and PaperMono targets independently and also validates the Git-backed wrapper examples on `main`.
 
-`.github/workflows/esphome.yml` uses a matrix and independently validates/compiles:
-
-- `esphome/basement-remote-sticky.yaml`
-- `esphome/basement-remote-papermono-lite.yaml`
-
-On `main`, CI also validates both Git-backed Device Builder wrapper examples. A PaperMono failure therefore does not remove the Sticky target, and the existing Sticky firmware remains a separate compile target.
-
-## PaperMono hardware validation plan
-
-When C153-LITE hardware is available:
-
-1. Confirm the M5PM1 and M5IOE1 initialize successfully.
-2. Confirm the frontlight turns on/off and dims correctly.
-3. Confirm the 480×800 remote face is correctly oriented.
-4. Confirm FT6336G touch coordinates align with every control.
-5. Confirm GPIO2/GPIO3 map to the intended physical user buttons and volume direction.
-6. Confirm tap and hold-to-repeat for both physical volume buttons.
-7. Confirm all Home Assistant navigation, playback, and app-launch actions.
-8. Confirm **Battery Voltage** is plausible on USB and battery.
-9. Validate repeated SSD1677 full refreshes and power-down/wake cycles.
-10. Add and validate PMIC system-power-button handling and TV-off sleep only after the wake path is proven reliable.
-
-## Sticky operational validation
-
-After any change that touches the Sticky target, confirm the v1.0.14 production behavior still works: touchscreen navigation, both physical volume buttons, awake short/long AI power actions, TV-state-driven sleep, approved sleep artwork, GPIO4 deep-sleep wake that also wakes the TV, GT911 touch recovery after deep sleep, battery telemetry, and the 100 ms GT911 startup yield.
-
-## Maintenance rules
+# Maintenance rules
 
 - `CitizenRacer/BasementRemote` on GitHub is the canonical source of truth.
-- **Every code check-in must update the README in the same change whenever behavior, UI, dependencies, setup, versioning, or operational expectations change.**
-- Keep the Sticky and PaperMono hardware definitions separate so development of one target cannot silently replace pins, buses, power sequencing, or wake behavior of the other.
+- **Every code check-in must update the README in the same commit whenever behavior, UI, dependencies, setup, versioning, or operational expectations change.**
+- Keep Sticky and PaperMono hardware definitions separate.
 - Keep Device Builder limited to secret-bearing package wrappers.
-- Do not commit credentials or the actual ESPHome API encryption key.
+- Never commit credentials or the real ESPHome API encryption key.
 - Keep app launcher source names aligned with `media_player.basement_apple_tv`.
-- Keep UI artwork vendored under `assets/`; do not add third-party build-time asset URLs back to production firmware.
-- Do not add e-paper refreshes for individual navigation, playback, volume, or app-launch presses unless the visible UI requires them.
+- Keep UI artwork vendored under `assets/`.
+- Do not refresh the e-paper display for ordinary navigation, playback, volume, or app-launch presses unless visible UI state requires it.
