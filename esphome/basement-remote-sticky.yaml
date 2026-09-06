@@ -1,24 +1,26 @@
 # Basement Remote Sticky firmware
 #
-# v1.0.29 keeps the complete v1.0.28 behavior and disables physical UART
-# logging to reduce unnecessary awake power use. DEBUG logging remains available
-# to API log clients such as ESPHome Device Builder.
+# v1.0.30 keeps the complete v1.0.29 behavior and removes the automatic
+# 10-minute e-paper refresh. The static remote face now refreshes only when
+# explicitly required: startup, low-battery threshold changes, manual refresh,
+# or the final sleep-screen render before deep sleep.
 
 substitutions:
   device_name: basement-remote-sticky
   friendly_name: Basement Remote Sticky
-  firmware_version: "1.0.29"
+  firmware_version: "1.0.30"
 
 packages:
-  sticky_v1028_base:
+  sticky_v1029_base:
     url: https://github.com/CitizenRacer/BasementRemote
-    ref: ccbee06f527e63289cfb1b6d29b907b4e0bcb798
+    ref: db04f04fdf0d8dca4b40499d230a97b9a3c08c6e
     files:
       - esphome/basement-remote-sticky.yaml
     refresh: 0s
 
-# Keep production DEBUG logs available over the ESPHome native API, but stop
-# continuously driving the physical serial console. Component-level overrides
-# inherited from v1.0.28 (including RTTTL=WARN) remain in effect.
-logger:
-  baud_rate: 0
+# The normal remote face is static, so periodic full e-paper refreshes waste
+# energy without changing what the user sees. Explicit component.update calls
+# still handle startup, low-battery state changes, manual refresh, and sleep.
+display:
+  - id: !extend epaper_display
+    update_interval: never
