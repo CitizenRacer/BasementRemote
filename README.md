@@ -6,7 +6,7 @@ Touchscreen e-paper TV remote firmware backed directly by Home Assistant over ES
 
 | Hardware | Firmware | Status |
 | --- | --- | --- |
-| Seeed Studio reTerminal Sticky | **v1.0.19** | Production target; v1.0.19 keeps the current wake/touch recovery work and makes entities unavailable while the board is asleep |
+| Seeed Studio reTerminal Sticky | **v1.0.20** | Production target; current work focuses on reliable deep-sleep wake and GT911 recovery |
 | M5Stack M5PaperMono Lite (C153-LITE) | **v0.1.0** | Initial bring-up / compile validated; hardware not yet available |
 
 The production Sticky source is [`esphome/basement-remote-sticky.yaml`](esphome/basement-remote-sticky.yaml). The PaperMono target remains separate.
@@ -40,14 +40,7 @@ For the ESPHome integration, **Allow the device to perform Home Assistant action
 
 ## Shared touchscreen layout
 
-Both hardware targets use a 480×800 portrait remote layout with:
-
-- D-pad and Select
-- Back and Home
-- skip backward, play, pause, skip forward
-- Hulu, HBO Max, Disney+, and Paramount+ launchers
-
-D-pad hold-to-repeat fires immediately, starts repeating after 500 ms, and repeats every 175 ms while held. UI artwork is vendored under [`assets/`](assets/).
+Both hardware targets use a 480×800 portrait remote layout with a D-pad/Select, Back/Home, playback controls, and Hulu/HBO Max/Disney+/Paramount+ launchers. D-pad hold-to-repeat starts after 500 ms and repeats every 175 ms. UI artwork is vendored under [`assets/`](assets/).
 
 # reTerminal Sticky
 
@@ -71,42 +64,46 @@ The Sticky uses ESPHome's `Seeed-reTerminal-Sticky` SSD1677 display model with a
 
 ## Entity availability while asleep
 
-Home Assistant normally keeps ESPHome entities available during an expected deep-sleep disconnect when the device reports `has_deep_sleep=true`. That behavior is useful for ordinary battery sensors because it preserves the last reading, but it is intentionally not used for this remote.
-
-Beginning with v1.0.19, the Sticky disables Wi-Fi immediately before invoking `deep_sleep.enter`. This makes Home Assistant observe a real/unexpected API connectivity loss before ESPHome performs its normal graceful deep-sleep shutdown. The result is intentional:
-
-- while the Sticky is asleep, its ESPHome entities should be **Unavailable**;
-- when the AI / Power button wakes the Sticky and Wi-Fi/API reconnect, the entities should become available again and publish their current values;
-- ordinary OTA updates and reboots still use ESPHome's normal shutdown path; only the deliberate sleep-entry path drops Wi-Fi first.
-
-The one-second pause between `wifi.disable` and `deep_sleep.enter` exists to give Home Assistant time to process the TCP/API disconnect before the MCU enters deep sleep.
+Beginning with v1.0.19, the deliberate sleep-entry path disables Wi-Fi one second before `deep_sleep.enter`. This is intentional so Home Assistant sees connectivity loss and marks the Sticky's ESPHome entities **Unavailable** while the board is asleep. On wake, Wi-Fi/API reconnect and the entities become available again. OTA/reboots still use normal ESPHome shutdown behavior.
 
 ## Wake/touch reliability history
 
 ### v1.0.15–v1.0.16
 
-These versions added wake-reconnect and GT911 recovery experiments. The early retained-GPIO handling could interfere with the Sticky's board power latch: a short AI press could fail to keep the unit powered, while holding AI long enough allowed it to wake.
+Early retained-GPIO recovery experiments could interfere with the Sticky's board power latch. A short AI press could fail to keep the unit powered, while holding AI long enough allowed it to wake.
 
 ### v1.0.17
 
-v1.0.17 removed all added manipulation of GPIO45/GPIO46/GPIO47 and restored the known-good v1.0.14 board power-latch sequence. This restored short-press wake, but hardware testing still showed that the display touchscreen could remain unresponsive after wake.
+All added manipulation of GPIO45/GPIO46/GPIO47 was removed, restoring the known-good v1.0.14 board power-latch sequence. Short-press wake returned, but touchscreen recovery still failed after wake.
 
 ### v1.0.18–v1.0.19
 
-These versions isolate the remaining wake work to the GT911 touchscreen and do not alter the board power latch.
+GT911 recovery was isolated from the board power latch. GPIO42 was retained HIGH through deep sleep to avoid cold-power-cycling the touchscreen. These versions also delayed touch setup and disabled the touch-bus scan.
 
-GPIO42 / GT911 is kept powered through ESP32 deep sleep instead of being cold-power-cycled on every sleep/wake transition. The v1.0.14 base shutdown briefly requests the touch rail off; the current shutdown hook runs afterward and restores GPIO42 HIGH, then holds that HIGH level through deep sleep. The normal GT911 reset-pin initialization still runs on boot.
+However, v1.0.18/v1.0.19 incorrectly forced the GT911 to **0x14**. Hardware logs from the production Sticky showed:
 
-Additional GT911 startup hardening:
+```text
+GT911 Touchscreen:
+  Address: 0x14
+  Interrupt Pin: GPIO21
+  Reset Pin: GPIO41
+touchscreen is marked FAILED: Communication failed
+```
 
-- the dedicated touch I²C bus does not perform an unnecessary startup scan;
-- GT911 setup is delayed to priority **500**, after the v1.0.14 priority-600 touch-power restoration;
-- the known Sticky GT911 I²C address is fixed at **0x14**;
-- known raw dimensions are supplied as calibration (`480×800`), avoiding an additional startup calibration-register read.
+That proved the driver was talking to the wrong address.
 
-This deliberately favors reliable wake/touch behavior over minimum sleep current. Keeping the GT911 powered may use more battery than holding GPIO42 low. Once repeated sleep/wake testing is reliable, a future optimization can put the powered GT911 into its documented hardware sleep mode instead of cutting its power.
+### v1.0.20
 
-The deep-sleep TV-on recovery path waits for Home Assistant to reconnect and then invokes `script.tv_turn_on_the_tv_cable`, the same TV-on sequence used by Alexa.
+v1.0.20 corrects the GT911 address to **0x5D**, matching Seeed's reTerminal Sticky ESPHome hardware definition and ESPHome's GT911 primary/default address. The manual calibration override is removed so the GT911 driver reads the controller's own configuration normally.
+
+The other reliability behavior remains unchanged:
+
+- GPIO45/GPIO46/GPIO47 remain owned by the known-good v1.0.14 power-latch sequence.
+- GPIO42 / GT911 remains powered through deep sleep.
+- GT911 setup remains delayed until after touch power restoration.
+- The touch I²C bus does not perform an unnecessary startup scan.
+- Deep-sleep wake waits for Home Assistant and calls `script.tv_turn_on_the_tv_cable`.
+- The deliberate sleep path drops Wi-Fi so entities are unavailable while asleep.
 
 ## Sticky hardware mapping
 
@@ -134,25 +131,22 @@ The deep-sleep TV-on recovery path waits for Home Assistant to reconnect and the
 
 The Sticky uses 32 MB flash and 8 MB octal PSRAM.
 
-## v1.0.19 validation checklist
+## v1.0.20 validation checklist
 
-1. Install v1.0.19 while the Sticky is awake.
-2. Confirm awake touchscreen controls work before the first sleep cycle.
-3. Turn the TV off and allow the remote to render the sleep screen.
-4. Confirm the Sticky's ESPHome entities change to **Unavailable** when Wi-Fi drops for sleep.
-5. Wake with a **brief tap** of AI / Power; do not hold it.
-6. Confirm the Sticky stays powered and `script.tv_turn_on_the_tv_cable` turns the TV on.
-7. Confirm the ESPHome entities return from **Unavailable** after Wi-Fi/API reconnect.
-8. Immediately touch several D-pad buttons and confirm **Last Touch X/Y** updates in Home Assistant.
-9. Confirm Back, Home, playback, app launchers, and both physical volume buttons work.
-10. Repeat the TV-off → unavailable → sleep → brief-tap wake → available cycle at least five times.
-11. Confirm battery telemetry remains plausible and observe sleep-current/battery-life impact before further power optimization.
+1. Install v1.0.20 while the Sticky is awake.
+2. Confirm the boot log reports **GT911 Address: 0x5D** with no `Communication failed` or `Calibration error`.
+3. Confirm awake touchscreen controls work before the first sleep cycle and **Last Touch X/Y** updates.
+4. Turn the TV off and allow the remote to render the sleep screen.
+5. Confirm the Sticky's ESPHome entities change to **Unavailable** when Wi-Fi drops for sleep.
+6. Wake with a **brief tap** of AI / Power.
+7. Confirm `script.tv_turn_on_the_tv_cable` turns the TV on and the entities return from **Unavailable**.
+8. Immediately confirm D-pad, Select, Back, Home, playback, app launchers, and both physical volume buttons work.
+9. Repeat the TV-off → unavailable → sleep → brief-tap wake → available/touch-working cycle at least five times.
+10. Observe battery behavior before optimizing GT911 sleep current further.
 
 # M5PaperMono Lite
 
-The PaperMono target is [`esphome/basement-remote-papermono-lite.yaml`](esphome/basement-remote-papermono-lite.yaml) and imports board support from `CitizenRacer/M5PaperMonoLite`.
-
-Its initial bring-up intentionally stays awake. PMIC-managed system-power-button handling and automatic TV-off sleep are deferred until real hardware is available for validation.
+The PaperMono target is [`esphome/basement-remote-papermono-lite.yaml`](esphome/basement-remote-papermono-lite.yaml) and imports board support from `CitizenRacer/M5PaperMonoLite`. Its initial bring-up intentionally stays awake; PMIC-managed power-button handling and automatic TV-off sleep are deferred until real hardware is available for validation.
 
 # ESPHome Device Builder
 

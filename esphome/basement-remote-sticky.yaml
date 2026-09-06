@@ -1,16 +1,17 @@
 # Basement Remote Sticky firmware
 #
-# v1.0.19 preserves the v1.0.18 wake/touch work and intentionally makes the
-# ESPHome API connection disappear before entering deep sleep so Home Assistant
-# marks the remote's entities unavailable while the board is asleep. Normal
-# boot reconnects Wi-Fi/API and restores entity availability automatically.
+# v1.0.20 corrects the GT911 address after hardware logs showed that v1.0.19
+# was trying to communicate at 0x14 and failing. Seeed's reTerminal Sticky
+# ESPHome generator documents the touch controller at 0x5D, which is also the
+# GT911 primary/default address in ESPHome. Keep the current wake, sleep, and
+# Home Assistant availability behavior otherwise unchanged.
 #
 # This file is the production package consumed by Device Builder.
 
 substitutions:
   device_name: basement-remote-sticky
   friendly_name: Basement Remote Sticky
-  firmware_version: "1.0.19"
+  firmware_version: "1.0.20"
 
 packages:
   sticky_v1014_base:
@@ -23,10 +24,9 @@ packages:
 # The v1.0.14 base owns GPIO45/GPIO46/GPIO47 and the board power latch. Do not
 # manipulate those pins here.
 #
-# v1.0.14 powered the GT911 rail off before deep sleep. Repeated hardware tests
-# showed that a cold GT911 start can leave ESPHome's touchscreen component
-# failed after wake. Keep GPIO42 powered and held HIGH through deep sleep instead.
-# The normal GT911 reset-pin sequence still runs on every boot.
+# Keep GPIO42 powered and held HIGH through deep sleep so the GT911 is not
+# cold-power-cycled on every sleep/wake transition. The normal GT911 reset-pin
+# sequence still runs on every boot.
 esphome:
   on_shutdown:
     - priority: 700
@@ -45,27 +45,21 @@ esphome:
   on_boot:
     - priority: -110
       then:
-        - logger.log: "Basement Remote v1.0.19 initialization complete"
+        - logger.log: "Basement Remote v1.0.20 initialization complete"
 
-# Do not scan the GT911 bus during startup. The controller is known and has a
-# dedicated bus; eliminating the scan removes an unnecessary transaction before
-# touchscreen initialization.
+# The GT911 has a dedicated I2C bus. Avoid the extra startup scan.
 i2c:
   - id: !extend touch_i2c
     scan: false
 
-# Initialize the GT911 only after the v1.0.14 priority-600 action has restored
-# the touch switch. The Sticky's controller uses 0x14. Supplying its known raw
-# dimensions also avoids the driver's separate startup calibration-register read.
+# Initialize only after the v1.0.14 priority-600 touch-power restoration.
+# v1.0.18/v1.0.19 incorrectly forced 0x14; hardware logs showed an immediate
+# communication failure there. Use the documented Sticky address 0x5D and let
+# the GT911 driver read the controller's own calibration/configuration normally.
 touchscreen:
   - id: !extend sticky_touch
     setup_priority: 500
-    address: 0x14
-    calibration:
-      x_min: 0
-      x_max: 480
-      y_min: 0
-      y_max: 800
+    address: 0x5D
 
 # Home Assistant can authenticate the ESPHome API before it has subscribed to
 # device actions. Wait for a state-subscribing Home Assistant client plus a
@@ -89,10 +83,8 @@ deep_sleep:
 
 script:
   # Replace the v1.0.14 sleep-entry script so Wi-Fi is disabled immediately
-  # before deep sleep. ESPHome normally performs a graceful API disconnect when
-  # entering deep sleep; Home Assistant deliberately retains entity availability
-  # for that case. Dropping Wi-Fi first makes the disconnect unexpected, so HA
-  # marks all ESPHome entities unavailable until the next boot reconnects.
+  # before deep sleep. This makes Home Assistant mark the remote's entities
+  # unavailable while it is asleep.
   - id: !remove render_sleep_and_enter
 
   - id: render_sleep_and_enter
