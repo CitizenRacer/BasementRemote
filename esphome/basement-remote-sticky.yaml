@@ -1,21 +1,26 @@
 # Basement Remote Sticky firmware
 #
-# v1.0.26 keeps the complete v1.0.25 behavior and suppresses repetitive RTTTL
-# debug output while Find Remote is sounding. Start/stop events remain logged,
-# while the per-phrase "Playing song" / "Playback finished" chatter is hidden.
+# v1.0.27 keeps the complete v1.0.26 behavior and reduces awake CPU frequency
+# from the ESP32-S3 default 240 MHz to 160 MHz for lower TV-on power use while
+# preserving normal touchscreen, Home Assistant API, and Wi-Fi responsiveness.
 
 substitutions:
   device_name: basement-remote-sticky
   friendly_name: Basement Remote Sticky
-  firmware_version: "1.0.26"
+  firmware_version: "1.0.27"
 
 packages:
-  sticky_v1025_base:
+  sticky_v1026_base:
     url: https://github.com/CitizenRacer/BasementRemote
-    ref: 4920a62fe3f47d14f967ed2fbcf9bb52cb4485bd
+    ref: 9081268f3d474fbaa141980b797fde92dcb09d62
     files:
       - esphome/basement-remote-sticky.yaml
     refresh: 0s
+
+# 160 MHz reduces awake CPU power while retaining plenty of headroom for the
+# e-paper UI, GT911 touch handling, and ESPHome/Home Assistant API traffic.
+esp32:
+  cpu_frequency: 160MHz
 
 # The locator watchdog intentionally restarts a short RTTTL phrase whenever it
 # finishes. RTTTL logs every start/finish at DEBUG, which is useful during bring-
