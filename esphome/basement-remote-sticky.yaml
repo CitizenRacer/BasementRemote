@@ -1,75 +1,24 @@
 # Basement Remote Sticky firmware
 #
-# v1.0.28 keeps the complete v1.0.27 behavior and fixes the authoritative
-# readiness signal so it cannot fire while the initial e-paper refresh is still
-# running. The ready line now waits for Home Assistant state, touch setup, and
-# the e-paper driver to return to idle after the startup refresh.
+# v1.0.29 keeps the complete v1.0.28 behavior and disables physical UART
+# logging to reduce unnecessary awake power use. DEBUG logging remains available
+# to API log clients such as ESPHome Device Builder.
 
 substitutions:
   device_name: basement-remote-sticky
   friendly_name: Basement Remote Sticky
-  firmware_version: "1.0.28"
+  firmware_version: "1.0.29"
 
 packages:
-  sticky_v1027_base:
+  sticky_v1028_base:
     url: https://github.com/CitizenRacer/BasementRemote
-    ref: b3c82b19640c4c5c5cf762b93c57dee77135563a
+    ref: ccbee06f527e63289cfb1b6d29b907b4e0bcb798
     files:
       - esphome/basement-remote-sticky.yaml
     refresh: 0s
 
-# Replace the inherited readiness script. The previous test only checked that
-# touch/display had not failed; at 160 MHz the initial asynchronous e-paper
-# refresh can still be running after those checks pass. EPaperBase disables its
-# loop once the refresh state machine returns to IDLE, so Component::is_idle()
-# gives us a completion signal rather than relying on an arbitrary delay.
-script:
-  - id: !remove report_ready_after_init
-
-  - id: report_ready_after_init
-    mode: single
-    then:
-      - if:
-          condition:
-            lambda: 'return !id(ready_logged);'
-          then:
-            - wait_until:
-                condition:
-                  and:
-                    - api.connected:
-                        state_subscription_only: true
-                    - lambda: |-
-                        const bool tv_state_ready =
-                            id(basement_tv_state).has_state() &&
-                            id(basement_tv_state).state != "unknown" &&
-                            id(basement_tv_state).state != "unavailable";
-                        const bool touch_ready =
-                            !id(sticky_touch).is_failed() &&
-                            (id(sticky_touch).is_in_loop_state() || id(sticky_touch).is_idle());
-                        const bool display_ready =
-                            !id(epaper_display).is_failed() && id(epaper_display).is_idle();
-                        return tv_state_ready && touch_ready && display_ready;
-                timeout: 30s
-            - if:
-                condition:
-                  and:
-                    - api.connected:
-                        state_subscription_only: true
-                    - lambda: |-
-                        const bool tv_state_ready =
-                            id(basement_tv_state).has_state() &&
-                            id(basement_tv_state).state != "unknown" &&
-                            id(basement_tv_state).state != "unavailable";
-                        const bool touch_ready =
-                            !id(sticky_touch).is_failed() &&
-                            (id(sticky_touch).is_in_loop_state() || id(sticky_touch).is_idle());
-                        const bool display_ready =
-                            !id(epaper_display).is_failed() && id(epaper_display).is_idle();
-                        return tv_state_ready && touch_ready && display_ready;
-                then:
-                  - logger.log: "Basement Remote firmware ${firmware_version} ready"
-                  - lambda: 'id(ready_logged) = true;'
-                else:
-                  - logger.log:
-                      level: ERROR
-                      format: "Basement Remote initialization incomplete after 30 seconds; not reporting ready"
+# Keep production DEBUG logs available over the ESPHome native API, but stop
+# continuously driving the physical serial console. Component-level overrides
+# inherited from v1.0.28 (including RTTTL=WARN) remain in effect.
+logger:
+  baud_rate: 0
