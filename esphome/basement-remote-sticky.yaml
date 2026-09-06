@@ -1,17 +1,14 @@
 # Basement Remote Sticky firmware
 #
-# v1.0.20 corrects the GT911 address after hardware logs showed that v1.0.19
-# was trying to communicate at 0x14 and failing. Seeed's reTerminal Sticky
-# ESPHome generator documents the touch controller at 0x5D, which is also the
-# GT911 primary/default address in ESPHome. Keep the current wake, sleep, and
-# Home Assistant availability behavior otherwise unchanged.
-#
-# This file is the production package consumed by Device Builder.
+# v1.0.22 makes the readiness log authoritative, removes the inherited printf
+# warning, keeps the corrected GT911 0x5D configuration, uses the shared Home
+# Assistant/Alexa TV-on path, and deliberately makes state-bearing HA entities
+# unavailable while the remote is asleep.
 
 substitutions:
   device_name: basement-remote-sticky
   friendly_name: Basement Remote Sticky
-  firmware_version: "1.0.20"
+  firmware_version: "1.0.22"
 
 packages:
   sticky_v1014_base:
@@ -21,20 +18,40 @@ packages:
       - esphome/basement-remote-sticky.yaml
     refresh: 0s
 
-# The v1.0.14 base owns GPIO45/GPIO46/GPIO47 and the board power latch. Do not
-# manipulate those pins here.
-#
-# Keep GPIO42 powered and held HIGH through deep sleep so the GT911 is not
-# cold-power-cycled on every sleep/wake transition. The normal GT911 reset-pin
-# sequence still runs on every boot.
+  # Remove the inherited v1.0.14 on_boot automation so its early "ready" log
+  # cannot fire before Wi-Fi/API/Home Assistant are actually usable. The local
+  # on_boot block below recreates only the required hardware sequencing.
+  remove_legacy_boot:
+    esphome:
+      on_boot: !remove
+
 esphome:
+  on_boot:
+    - priority: 900
+      then:
+        - lambda: |-
+            gpio_deep_sleep_hold_dis();
+            gpio_hold_dis(GPIO_NUM_42);
+            gpio_set_direction(GPIO_NUM_42, GPIO_MODE_OUTPUT);
+            gpio_set_level(GPIO_NUM_42, 1);
+            gpio_hold_dis(GPIO_NUM_45);
+            gpio_hold_dis(GPIO_NUM_46);
+            gpio_hold_dis(GPIO_NUM_47);
+    - priority: 600
+      then:
+        - output.turn_on: pwr_hold
+        - output.turn_on: pwr_lock
+        - switch.turn_on: touch_power_enable
+        - delay: 100ms
+        - component.update: epaper_display
+
+  # The base shutdown runs first at its default priority. This later shutdown
+  # action changes only GPIO42, retaining touch power through deep sleep while
+  # leaving the board latch and e-paper rail untouched.
   on_shutdown:
     - priority: 700
       then:
         - lambda: |-
-            // The base shutdown has already disabled/held GPIO42 LOW. Override
-            // only that touch rail after the base shutdown action; leave the
-            // board power latch and e-paper rail completely untouched.
             gpio_hold_dis(GPIO_NUM_42);
             gpio_set_direction(GPIO_NUM_42, GPIO_MODE_OUTPUT);
             gpio_set_level(GPIO_NUM_42, 1);
@@ -42,28 +59,70 @@ esphome:
             gpio_deep_sleep_hold_en();
             ESP_LOGI("touch", "GT911 power retained through deep sleep");
 
-  on_boot:
-    - priority: -110
-      then:
-        - logger.log: "Basement Remote v1.0.20 initialization complete"
-
 # The GT911 has a dedicated I2C bus. Avoid the extra startup scan.
 i2c:
   - id: !extend touch_i2c
     scan: false
 
-# Initialize only after the v1.0.14 priority-600 touch-power restoration.
-# v1.0.18/v1.0.19 incorrectly forced 0x14; hardware logs showed an immediate
-# communication failure there. Use the documented Sticky address 0x5D and let
-# the GT911 driver read the controller's own calibration/configuration normally.
+# Replace only the inherited AI / Power binary sensor so the held-time log uses
+# a printf format that exactly matches the ESP32-S3 toolchain's argument type.
+binary_sensor:
+  - id: !remove button_ai_power
+
+  - platform: gpio
+    id: button_ai_power
+    name: "AI Power Button"
+    pin:
+      number: GPIO4
+      allow_other_uses: true
+      mode:
+        input: true
+        pullup: true
+      inverted: true
+    filters:
+      - delayed_on: 10ms
+      - delayed_off: 10ms
+    on_press:
+      - logger.log: "AI / Power button pressed"
+      - lambda: |-
+          if (!id(woke_from_tv_off_sleep)) {
+            id(ai_power_pressed_ms) = millis();
+          }
+          id(tv_wake_in_progress) = true;
+    on_release:
+      - lambda: |-
+          const bool was_sleep_wake = id(woke_from_tv_off_sleep);
+          id(woke_from_tv_off_sleep) = false;
+
+          if (was_sleep_wake) {
+            ESP_LOGD("power", "Ignoring release classification for deep-sleep wake press");
+            return;
+          }
+
+          const uint32_t held_ms = millis() - id(ai_power_pressed_ms);
+          if (held_ms >= 800) {
+            ESP_LOGI("power", "AI / Power long press (%lu ms): TV off",
+                     static_cast<unsigned long>(held_ms));
+            id(turn_tv_off_after_power_button).execute();
+          } else {
+            ESP_LOGI("power", "AI / Power short press (%lu ms): TV on",
+                     static_cast<unsigned long>(held_ms));
+            id(wake_tv_after_power_button).execute();
+          }
+
+globals:
+  - id: ready_logged
+    type: bool
+    restore_value: false
+    initial_value: "false"
+
+# Initialize after touch power restoration. 0x5D is the working GT911 address
+# confirmed by the production Sticky boot log.
 touchscreen:
   - id: !extend sticky_touch
     setup_priority: 500
     address: 0x5D
 
-# Home Assistant can authenticate the ESPHome API before it has subscribed to
-# device actions. Wait for a state-subscribing Home Assistant client plus a
-# short grace period before invoking the shared TV-on script.
 api:
   id: remote_api
   on_client_connected:
@@ -73,18 +132,80 @@ api:
           api.connected:
             state_subscription_only: true
         then:
-          - logger.log: "Home Assistant API subscription is ready for remote actions"
+          # A connected API socket is not enough: wait until Home Assistant has
+          # delivered the imported TV state before declaring the remote ready.
+          - wait_until:
+              condition:
+                lambda: |-
+                  return id(basement_tv_state).has_state() &&
+                         id(basement_tv_state).state != "unknown" &&
+                         id(basement_tv_state).state != "unavailable";
+              timeout: 15s
+          - if:
+              condition:
+                lambda: |-
+                  return !id(ready_logged) &&
+                         id(basement_tv_state).has_state() &&
+                         id(basement_tv_state).state != "unknown" &&
+                         id(basement_tv_state).state != "unavailable" &&
+                         !id(sticky_touch).is_failed() &&
+                         !id(epaper_display).is_failed();
+              then:
+                - logger.log: "Basement Remote firmware ${firmware_version} ready"
+                - lambda: 'id(ready_logged) = true;'
+              else:
+                - logger.log:
+                    level: ERROR
+                    format: "Basement Remote initialization incomplete; not reporting ready"
 
-# Keep the v1.0.14 GPIO4 wake source and power-latch sequencing unchanged. This
-# secondary recovery path handles slow Wi-Fi/API reconnects after a physical wake.
+# Keep the v1.0.14 GPIO4 wake source and board-latch behavior. Add the slower HA
+# recovery path for reconnects that take longer than the first wake automation.
 deep_sleep:
   on_wake:
     - script.execute: wake_tv_after_reconnect
 
 script:
-  # Replace the v1.0.14 sleep-entry script so Wi-Fi is disabled immediately
-  # before deep sleep. This makes Home Assistant mark the remote's entities
-  # unavailable while it is asleep.
+  # Awake short presses and deep-sleep wake both use the same authoritative
+  # Home Assistant TV-on script used by Alexa.
+  - id: !remove wake_tv_after_power_button
+
+  - id: wake_tv_after_power_button
+    mode: restart
+    then:
+      - lambda: 'id(tv_wake_in_progress) = true;'
+      - logger.log: "AI / Power wake: waiting for Home Assistant"
+      - wait_until:
+          condition:
+            api.connected:
+              state_subscription_only: true
+          timeout: 60s
+      - if:
+          condition:
+            api.connected:
+              state_subscription_only: true
+          then:
+            - delay: 2s
+            - logger.log: "AI / Power wake: calling shared Home Assistant TV-on script"
+            - homeassistant.action:
+                action: script.tv_turn_on_the_tv_cable
+          else:
+            - logger.log:
+                level: ERROR
+                format: "AI / Power wake: Home Assistant did not become ready"
+      - delay: 30s
+      - lambda: 'id(tv_wake_in_progress) = false;'
+      - if:
+          condition:
+            lambda: |-
+              return id(basement_tv_state).has_state() &&
+                     id(basement_tv_state).state == "off";
+          then:
+            - script.execute: enter_tv_off_sleep
+
+  # Replace the inherited sleep-entry script. Wi-Fi is deliberately disabled
+  # before deep_sleep.enter so Home Assistant sees an unexpected disconnect and
+  # marks state-bearing ESPHome entities unavailable instead of retaining stale
+  # values for an expected deep-sleep disconnect.
   - id: !remove render_sleep_and_enter
 
   - id: render_sleep_and_enter
@@ -94,9 +215,9 @@ script:
       - lambda: 'id(sleep_display_active) = true;'
       - component.update: epaper_display
       - delay: 10s
-      - logger.log: "Sleep face rendered; dropping Wi-Fi so HA marks entities unavailable"
+      - logger.log: "Sleep face rendered; dropping Wi-Fi before deep sleep"
       - wifi.disable:
-      - delay: 1s
+      - delay: 2s
       - deep_sleep.enter: tv_power_sleep
 
   - id: wake_tv_after_reconnect
