@@ -6,7 +6,7 @@ Touchscreen e-paper TV remote firmware backed directly by Home Assistant over ES
 
 | Hardware | Firmware | Status |
 | --- | --- | --- |
-| Seeed Studio reTerminal Sticky | **v1.0.15** | Production / hardware validated through v1.0.14; v1.0.15 wake recovery pending deployment validation |
+| Seeed Studio reTerminal Sticky | **v1.0.16** | Production / hardware validated through v1.0.14; v1.0.16 wake/touch recovery pending deployment validation |
 | M5Stack M5PaperMono Lite (C153-LITE) | **v0.1.0** | Initial bring-up / compile validated; hardware not yet available |
 
 The production Sticky source is [`esphome/basement-remote-sticky.yaml`](esphome/basement-remote-sticky.yaml). The PaperMono target is separate and does not replace Sticky hardware configuration.
@@ -36,6 +36,7 @@ The remote intentionally uses the same Home Assistant entities and actions as th
 - `remote.basement_apple_tv` — navigation, transport, power, and volume commands
 - `media_player.basement_apple_tv` — streaming-service app launchers
 - `media_player.basement_tv` — imported as **TV State Seen By Remote** and used as the Sticky's sleep authority
+- `script.tv_turn_on_the_tv_cable` — authoritative TV-on sequence shared with Alexa and the Sticky deep-sleep recovery path
 
 For the ESPHome integration, **Allow the device to perform Home Assistant actions** must be enabled.
 
@@ -71,7 +72,7 @@ All awake UI artwork is repository-owned under [`assets/`](assets/). The interfa
 | --- | --- |
 | AI / Power while awake, short press | Apple TV `wakeup` |
 | AI / Power while awake, hold ≥ 800 ms | Apple TV `suspend` |
-| AI / Power while asleep | Wake the Sticky and wake the Apple TV after Home Assistant reconnects |
+| AI / Power while asleep | Wake the Sticky; the recovery path calls `script.tv_turn_on_the_tv_cable` after Home Assistant reconnects |
 | Upper side button | Apple TV `volume_up` |
 | Lower side button | Apple TV `volume_down` |
 
@@ -87,25 +88,29 @@ The sleep artwork is [`assets/sleep-screen.svg`](assets/sleep-screen.svg). GPIO4
 
 ## v1.0.15 wake/recovery hardening
 
-v1.0.15 addresses two observed wake regressions from v1.0.14:
+v1.0.15 addressed two observed wake regressions from v1.0.14:
 
-1. **TV wake command could be lost during API reconnect.** Home Assistant logged an ESPHome encrypted-handshake failure during a real wake and the reconnect took longer than the old 20-second wait. ESPHome also documents that Home Assistant actions sent immediately after an API connection can be dropped before Home Assistant finishes subscribing to device actions.
-2. **GT911 touch could remain dead after wake.** Home Assistant showed the Sticky back online while **Last Touch X/Y** remained `unknown`, confirming that the touchscreen itself had not recovered.
+1. **TV wake command could be lost during API reconnect.** A real wake showed that reconnect can take longer than the old 20-second wait, and an authenticated ESPHome API connection can exist before Home Assistant has finished subscribing to device actions.
+2. **GT911 touch could remain dead after wake.** Home Assistant showed the Sticky back online while **Last Touch X/Y** remained `unknown`, indicating that the touchscreen itself had not recovered.
 
-v1.0.15 therefore adds:
+The recovery layer therefore adds:
 
 - a second idempotent deep-sleep recovery path that waits up to 60 seconds for a Home Assistant state-subscribing API client;
-- an additional 2-second grace period before sending the Apple TV `wakeup` action so Home Assistant has time to register the action subscription;
-- a wake interlock that remains asserted while HDMI-CEC/LG state converges;
+- an additional 2-second grace period before issuing the recovery Home Assistant action;
+- a wake interlock that remains asserted while the TV/LG state converges;
 - an early boot recovery step at priority 1150 that releases retained deep-sleep GPIO holds before normal touch power setup;
 - a guaranteed GT911 cold power cycle on GPIO42: 25 ms off, then 150 ms powered before the normal ESPHome GT911 initialization sequence;
-- explicit recovery logging for the touch power cycle, HA subscription readiness, and recovery wake command.
+- explicit recovery logging for the touch power cycle, HA subscription readiness, and recovery TV-on action.
 
-The original v1.0.14 wake path remains in place. The new wake command is intentionally idempotent: sending Apple TV `wakeup` twice is safer than allowing a slow reconnect to lose the only wake request.
+The v1.0.14 fast wake path remains as an early best-effort path. The longer recovery path is the authoritative path for surviving a slow Home Assistant reconnect.
 
-### v1.0.15 implementation note
+## v1.0.16 shared TV-on path
 
-To keep the recovery delta small and auditable, `esphome/basement-remote-sticky.yaml` currently imports the last hardware-validated v1.0.14 production file from commit `dc4113e58f1b3d96a08825d5e63aadbaac05603b` and layers the v1.0.15 recovery configuration on top using ESPHome packages. Main-file substitutions override the base version to `1.0.15`.
+v1.0.16 keeps the v1.0.15 GT911 and reconnect hardening but changes the authoritative deep-sleep recovery action. Instead of sending another raw Apple TV `wakeup` command, it calls Home Assistant `script.tv_turn_on_the_tv_cable`, the same TV-on sequence used by Alexa. This keeps the proven Home Assistant power-on logic in one place and lets that script own any Wake-on-LAN, Apple TV, HDMI-CEC, or other sequencing it needs.
+
+### v1.0.16 implementation note
+
+To keep the recovery delta small and auditable, `esphome/basement-remote-sticky.yaml` imports the last hardware-validated v1.0.14 production file from commit `dc4113e58f1b3d96a08825d5e63aadbaac05603b` and layers the current recovery configuration on top using ESPHome packages. Main-file substitutions override the base version to `1.0.16`.
 
 This layering is deliberate: the complete v1.0.14 UI, control mappings, assets, battery telemetry, and sleep implementation remain frozen while the wake/touch fix is validated on hardware.
 
@@ -137,10 +142,10 @@ The Sticky uses 32 MB flash and 8 MB octal PSRAM.
 
 ## Sticky validation checklist
 
-After deploying v1.0.15, validate in this order:
+After deploying v1.0.16, validate in this order:
 
 1. With the TV off and the sleep face visible, press the AI / Power button once.
-2. Confirm the Sticky wakes and the Apple TV/TV powers on without a second press.
+2. Confirm the Sticky wakes and the TV powers on without a second press through the shared `script.tv_turn_on_the_tv_cable` path.
 3. Confirm **Last Touch X/Y** changes immediately when the screen is touched after wake.
 4. Confirm D-pad, Select, Back, Home, playback, and all app launchers work.
 5. Confirm both physical volume buttons work and repeat when held.

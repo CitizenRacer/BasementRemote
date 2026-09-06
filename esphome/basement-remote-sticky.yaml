@@ -1,15 +1,17 @@
 # Basement Remote Sticky firmware
 #
-# v1.0.15 layers targeted wake/recovery fixes over the last hardware-validated
-# v1.0.14 implementation. Pinning the base commit keeps the complete production
-# UI and control surface unchanged while making the recovery delta explicit.
+# v1.0.16 layers the shared Home Assistant/Alexa TV-on path over the v1.0.15
+# wake/touch recovery fixes, which themselves are layered over the last
+# hardware-validated v1.0.14 implementation. Pinning the base commit keeps the
+# complete production UI and control surface unchanged while making the
+# recovery delta explicit.
 #
 # This file is still the production package consumed by Device Builder.
 
 substitutions:
   device_name: basement-remote-sticky
   friendly_name: Basement Remote Sticky
-  firmware_version: "1.0.15"
+  firmware_version: "1.0.16"
 
 packages:
   sticky_v1014_base:
@@ -44,7 +46,7 @@ esphome:
 
     - priority: -110
       then:
-        - logger.log: "Basement Remote v1.0.15 recovery initialization complete"
+        - logger.log: "Basement Remote v1.0.16 recovery initialization complete"
 
 # Home Assistant can authenticate the ESPHome API before it has subscribed to
 # device actions. ESPHome explicitly warns that actions sent in that gap are
@@ -61,10 +63,10 @@ api:
         then:
           - logger.log: "Home Assistant API subscription is ready for remote actions"
 
-# Keep the existing v1.0.14 on_wake path, but add a second idempotent recovery
-# path that survives slow Wi-Fi/API reconnects. The Apple TV wakeup command is
-# safe to repeat, and this path waits for a Home Assistant state subscription plus
-# an additional action-subscription grace period before sending it.
+# Keep the existing v1.0.14 fast wake path, but add a second idempotent recovery
+# path that survives slow Wi-Fi/API reconnects. The authoritative recovery action
+# now calls the same Home Assistant TV-on script used by Alexa rather than sending
+# another raw Apple TV wakeup command.
 deep_sleep:
   on_wake:
     - script.execute: wake_tv_after_reconnect
@@ -88,14 +90,12 @@ script:
             # ESPHome documents that Home Assistant action subscriptions can lag
             # the API connection itself. Do not send immediately on connect.
             - delay: 2s
-            - logger.log: "Deep-sleep recovery: sending Apple TV wakeup"
+            - logger.log: "Deep-sleep recovery: calling shared Home Assistant TV-on script"
             - homeassistant.action:
-                action: remote.send_command
-                data:
-                  entity_id: remote.basement_apple_tv
-                  command: wakeup
-            # Keep the sleep interlock asserted while HDMI-CEC/LG state catches
-            # up, even if the older v1.0.14 wake script times out and clears it.
+                action: script.tv_turn_on_the_tv_cable
+            # Keep the sleep interlock asserted while the shared Home Assistant
+            # power-on sequence and LG state catch up, even if the older v1.0.14
+            # wake script times out and clears it.
             - repeat:
                 count: 8
                 then:
