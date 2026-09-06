@@ -6,7 +6,7 @@ Touchscreen e-paper TV remote firmware backed directly by Home Assistant over ES
 
 | Hardware | Firmware | Status |
 | --- | --- | --- |
-| Seeed Studio reTerminal Sticky | **v1.0.31** | Production target |
+| Seeed Studio reTerminal Sticky | **v1.0.32** | Production target |
 | M5Stack M5PaperMono Lite (C153-LITE) | **v0.1.0** | Initial bring-up / compile validated; hardware not yet available |
 
 The production Sticky source is [`esphome/basement-remote-sticky.yaml`](esphome/basement-remote-sticky.yaml). The PaperMono target remains separate.
@@ -118,20 +118,22 @@ Production behavior retains these validated fixes:
 The old early boot `ready` message is removed. Firmware emits exactly one readiness line per boot:
 
 ```text
-Basement Remote firmware 1.0.31 ready
+Basement Remote firmware 1.0.32 ready
 ```
 
-Beginning with **v1.0.31**, that line is emitted only after all of the following are true:
+Beginning with **v1.0.32**, that line is emitted only after all of the following are true:
 
 - a Home Assistant state-subscribing API client is connected;
 - **TV State Seen By Remote** has received a real value rather than `unknown`/`unavailable`;
 - the GT911 touchscreen has completed component setup and has not failed;
-- the SSD1677 hardware **BUSY** signal on GPIO18 has asserted during the startup refresh and then deasserted, proving that the physical panel refresh completed; and
-- the ESPHome e-paper component has subsequently returned to its idle state.
+- the SSD1677 hardware **BUSY** signal on GPIO18 has been observed asserted after the startup `component.update`, proving that the physical e-paper update actually entered hardware work; and
+- after that BUSY assertion, the ESPHome e-paper state machine has returned to IDLE, meaning the full update, power-off, and controller-deep-sleep sequence completed.
 
-The v1.0.28 readiness change attempted to use `Component::is_idle()` as the display-completion signal. That was not sufficiently authoritative: in ESPHome, `Component::is_idle()` means that the component loop is disabled and can be true before the startup refresh has actually begun. v1.0.31 therefore observes the panel's hardware BUSY high→low transition and uses component idle only as a final software-state check after that hardware completion event.
+The v1.0.28 readiness change incorrectly treated `Component::is_idle()` as a sufficient refresh-completion signal. In ESPHome, `Component::is_idle()` means the component loop is disabled and may already be true before the startup refresh begins. v1.0.32 therefore requires a hardware BUSY event first and only then accepts the later return to component IDLE.
 
-Readiness checks are serialized through a `mode: single` script so Device Builder's live logger or other transient API clients cannot produce duplicate/spurious post-ready initialization errors. If the complete readiness criteria are not satisfied within 30 seconds, firmware logs an initialization error and deliberately does not claim to be ready.
+**v1.0.31 was superseded before deployment.** Its first implementation attempted to replace the inherited readiness script under the same ID, and CI correctly rejected the package merge with a duplicate-ID validation error. v1.0.32 starts from the last validated v1.0.30 package, removes the inherited API readiness callback, and uses new versioned script IDs so the old script can remain defined but unreachable.
+
+Readiness checks are serialized through a `mode: single` script so Device Builder's live logger or other transient API clients cannot produce duplicate readiness lines. If the complete readiness criteria are not satisfied within 45 seconds, firmware logs an initialization error and deliberately does not claim to be ready.
 
 ## Sticky hardware mapping
 
@@ -160,16 +162,16 @@ Readiness checks are serialized through a `mode: single` script so Device Builde
 
 The Sticky uses 32 MB flash and 8 MB octal PSRAM. While awake, production firmware runs the ESP32-S3 at 160 MHz.
 
-## v1.0.31 validation checklist
+## v1.0.32 validation checklist
 
-1. Compile v1.0.31 and confirm the previous `%u` / `long unsigned int` `-Wformat` warning remains absent.
+1. Compile v1.0.32 and confirm the previous `%u` / `long unsigned int` `-Wformat` warning remains absent.
 2. Confirm the generated ESP32 configuration uses a **160 MHz** CPU frequency.
 3. Confirm the logger configuration has physical UART output disabled (`baud_rate: 0`) while DEBUG/API logging remains available.
 4. Confirm `epaper_display` uses `update_interval: never` and no periodic full refresh occurs while the TV remains on.
 5. Boot and confirm GT911 reports **Address: 0x5D** with no communication/calibration failure.
-6. Confirm startup logs show `Startup e-paper BUSY asserted` followed later by `Startup e-paper BUSY cleared; panel refresh complete`.
-7. Confirm `Basement Remote firmware 1.0.31 ready` occurs only after the BUSY-cleared message and the startup e-paper refresh is visibly complete.
-8. Confirm exactly one readiness line is emitted per boot and that it includes `1.0.31`.
+6. Confirm startup logs show `Startup e-paper BUSY observed; waiting for display state machine to finish` and then `Startup e-paper refresh state machine complete`.
+7. Confirm `Basement Remote firmware 1.0.32 ready` occurs only after the state-machine-complete message and after the startup e-paper refresh is visibly finished.
+8. Confirm exactly one readiness line is emitted per boot and that it includes `1.0.32`.
 9. Confirm the low-battery threshold change still refreshes the battery glyph and **Refresh E-Paper** still forces a refresh.
 10. With the TV on, confirm touchscreen navigation, app launchers, and physical volume controls remain immediately responsive and Home Assistant stays connected.
 11. Turn **Find Remote** on and confirm the alternating-pitch locator repeats continuously.
