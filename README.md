@@ -183,5 +183,3 @@ Both targets require ESPHome 2026.8.2 or newer. `.github/workflows/esphome.yml` 
 - Keep app launcher source names aligned with `media_player.basement_apple_tv`.
 - Keep UI artwork vendored under `assets/`.
 - Do not refresh e-paper for ordinary navigation, playback, volume, or app-launch presses unless visible UI state requires it.
-
-Validation note: the v1.0.22 firmware commit must change this README together with the Sticky YAML; README-only staging commits are not considered the completed firmware change.
