@@ -6,7 +6,7 @@ Touchscreen e-paper TV remote firmware backed directly by Home Assistant over ES
 
 | Hardware | Firmware | Status |
 | --- | --- | --- |
-| Seeed Studio reTerminal Sticky | **v1.0.27** | Production target |
+| Seeed Studio reTerminal Sticky | **v1.0.28** | Production target |
 | M5Stack M5PaperMono Lite (C153-LITE) | **v0.1.0** | Initial bring-up / compile validated; hardware not yet available |
 
 The production Sticky source is [`esphome/basement-remote-sticky.yaml`](esphome/basement-remote-sticky.yaml). The PaperMono target remains separate.
@@ -114,12 +114,19 @@ Production behavior retains these validated fixes:
 The old early boot `ready` message is removed. Firmware emits exactly one readiness line per boot:
 
 ```text
-Basement Remote firmware 1.0.27 ready
+Basement Remote firmware 1.0.28 ready
 ```
 
-That line is emitted only after the GT911/display are healthy, Wi-Fi/API are connected, a Home Assistant state-subscribing client is present, and **TV State Seen By Remote** has received a real value rather than `unknown`/`unavailable`.
+Beginning with **v1.0.28**, that line is emitted only after all of the following are true:
 
-Readiness checks are serialized through a `mode: single` script so Device Builder's live logger or other transient API clients cannot produce duplicate/spurious post-ready initialization errors.
+- a Home Assistant state-subscribing API client is connected;
+- **TV State Seen By Remote** has received a real value rather than `unknown`/`unavailable`;
+- the GT911 touchscreen has completed component setup and has not failed; and
+- the initial asynchronous e-paper refresh has fully completed and the display driver has returned to its idle state.
+
+This fixes a latent race exposed by the 160 MHz change: the previous readiness test checked only that the display had not failed, so it could log `ready` while the startup e-paper refresh was still running. The new check uses the e-paper component's actual idle/completion state instead of an arbitrary delay.
+
+Readiness checks are serialized through a `mode: single` script so Device Builder's live logger or other transient API clients cannot produce duplicate/spurious post-ready initialization errors. If the complete readiness criteria are not satisfied within 30 seconds, firmware logs an initialization error and deliberately does not claim to be ready.
 
 ## Sticky hardware mapping
 
@@ -148,21 +155,22 @@ Readiness checks are serialized through a `mode: single` script so Device Builde
 
 The Sticky uses 32 MB flash and 8 MB octal PSRAM. While awake, production firmware runs the ESP32-S3 at 160 MHz.
 
-## v1.0.27 validation checklist
+## v1.0.28 validation checklist
 
-1. Compile v1.0.27 and confirm the previous `%u` / `long unsigned int` `-Wformat` warning remains absent.
+1. Compile v1.0.28 and confirm the previous `%u` / `long unsigned int` `-Wformat` warning remains absent.
 2. Confirm the generated ESP32 configuration uses a **160 MHz** CPU frequency.
 3. Boot and confirm GT911 reports **Address: 0x5D** with no communication/calibration failure.
-4. Confirm exactly one readiness line is emitted and it includes `1.0.27`.
-5. With the TV on, confirm touchscreen navigation, app launchers, and physical volume controls remain immediately responsive and Home Assistant stays connected.
-6. Turn **Find Remote** on and confirm the alternating-pitch locator repeats continuously.
-7. Confirm continuous Find Remote playback does **not** flood the logs with RTTTL `Playing song` / `Playback finished` DEBUG lines.
-8. Turn **Find Remote** off in Home Assistant and confirm the buzzer stops immediately.
-9. Start Find Remote again, press a physical/touch control, and confirm the buzzer stops and Home Assistant's Find Remote switch changes to **Off**.
-10. With the TV off, confirm Find Remote blocks deep sleep while active and normal sleep resumes after cancellation.
-11. Confirm state-bearing entities become **Unavailable** while asleep and return after wake.
-12. Wake with a brief AI / Power tap and confirm the shared Home Assistant TV-on script turns the TV on.
-13. Confirm touchscreen and physical volume controls still work after repeated sleep/wake cycles.
+4. Confirm the initial e-paper refresh fully finishes before `Basement Remote firmware 1.0.28 ready` is logged.
+5. Confirm exactly one readiness line is emitted per boot and that it includes `1.0.28`.
+6. With the TV on, confirm touchscreen navigation, app launchers, and physical volume controls remain immediately responsive and Home Assistant stays connected.
+7. Turn **Find Remote** on and confirm the alternating-pitch locator repeats continuously.
+8. Confirm continuous Find Remote playback does **not** flood the logs with RTTTL `Playing song` / `Playback finished` DEBUG lines.
+9. Turn **Find Remote** off in Home Assistant and confirm the buzzer stops immediately.
+10. Start Find Remote again, press a physical/touch control, and confirm the buzzer stops and Home Assistant's Find Remote switch changes to **Off**.
+11. With the TV off, confirm Find Remote blocks deep sleep while active and normal sleep resumes after cancellation.
+12. Confirm state-bearing entities become **Unavailable** while asleep and return after wake.
+13. Wake with a brief AI / Power tap and confirm the shared Home Assistant TV-on script turns the TV on.
+14. Confirm touchscreen and physical volume controls still work after repeated sleep/wake cycles.
 
 # M5PaperMono Lite
 
