@@ -86,7 +86,7 @@ That line is emitted only after:
 - a Home Assistant state-subscribing client is present; and
 - `TV State Seen By Remote` has received a real state instead of `unknown`/`unavailable`.
 
-If those conditions are not satisfied, the firmware does **not** claim it is ready and instead logs an initialization-incomplete error.
+If those conditions are not satisfied, the firmware does **not** claim it is ready and instead logs an initialization-incomplete error. The `ready` line is intentionally the final startup health signal, not merely an ESP32 boot-complete message.
 
 ## Wake/touch reliability history
 
@@ -183,3 +183,5 @@ Both targets require ESPHome 2026.8.2 or newer. `.github/workflows/esphome.yml` 
 - Keep app launcher source names aligned with `media_player.basement_apple_tv`.
 - Keep UI artwork vendored under `assets/`.
 - Do not refresh e-paper for ordinary navigation, playback, volume, or app-launch presses unless visible UI state requires it.
+
+Paired change status: v1.0.22 firmware and documentation are intended to ship together as one code-changing commit.
