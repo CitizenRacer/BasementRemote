@@ -1,12 +1,12 @@
 # Basement Remote Sticky firmware
 #
-# v1.0.24 adds the GPIO48 buzzer-backed Find Remote control while preserving
-# the v1.0.23 readiness, wake/touch, and sleep-availability behavior.
+# v1.0.25 makes Find Remote continuously self-restarting while preserving the
+# v1.0.24 buzzer, readiness, wake/touch, and sleep-availability behavior.
 
 substitutions:
   device_name: basement-remote-sticky
   friendly_name: Basement Remote Sticky
-  firmware_version: "1.0.24"
+  firmware_version: "1.0.25"
 
 packages:
   sticky_v1014_base:
@@ -70,15 +70,8 @@ output:
     pin: GPIO48
 
 rtttl:
+  id: locator_rtttl
   output: buzzer_pwm
-  on_finished_playback:
-    - if:
-        condition:
-          switch.is_on: find_remote
-        then:
-          # Repeat the alternating-pitch locator pattern until Find Remote is
-          # turned off in Home Assistant or local input cancels it.
-          - rtttl.play: 'find:d=8,o=6,b=180:a,p,e7,p,a,p,e7,p'
 
 # Replace only the inherited AI / Power binary sensor so the held-time log uses
 # a printf format that exactly matches the ESP32-S3 toolchain's argument type.
@@ -331,7 +324,8 @@ script:
 
 # Any local interaction dismisses Find Remote without consuming the user's
 # actual remote command. The inherited touch handler exposes touch_active, and
-# all three physical buttons are already binary sensors.
+# all three physical buttons are already binary sensors. A separate 250 ms
+# watchdog guarantees the locator restarts whenever RTTTL has gone idle.
 interval:
   - interval: 25ms
     then:
@@ -347,3 +341,11 @@ interval:
           then:
             - logger.log: "Find Remote cancelled by local input"
             - switch.turn_off: find_remote
+
+  - interval: 250ms
+    then:
+      - if:
+          condition:
+            lambda: 'return id(find_remote).state && !id(locator_rtttl).is_playing();'
+          then:
+            - rtttl.play: 'find:d=8,o=6,b=180:a,p,e7,p,a,p,e7,p'

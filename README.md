@@ -6,7 +6,7 @@ Touchscreen e-paper TV remote firmware backed directly by Home Assistant over ES
 
 | Hardware | Firmware | Status |
 | --- | --- | --- |
-| Seeed Studio reTerminal Sticky | **v1.0.24** | Production target; wake, touch, readiness, sleep availability, and Find Remote support |
+| Seeed Studio reTerminal Sticky | **v1.0.25** | Production target; wake, touch, readiness, sleep availability, and Find Remote support |
 | M5Stack M5PaperMono Lite (C153-LITE) | **v0.1.0** | Initial bring-up / compile validated; hardware not yet available |
 
 The production Sticky source is [`esphome/basement-remote-sticky.yaml`](esphome/basement-remote-sticky.yaml). The PaperMono target remains separate.
@@ -58,14 +58,16 @@ The side volume buttons use the same 500 ms / 175 ms hold-to-repeat behavior as 
 
 ## Find Remote
 
-v1.0.24 exposes a Home Assistant **Find Remote** switch backed by the reTerminal Sticky's built-in passive buzzer on **GPIO48**.
+The Sticky exposes a Home Assistant **Find Remote** switch backed by the built-in passive buzzer on **GPIO48**.
 
-Turning **Find Remote** on starts a repeating alternating-pitch locator pattern. The buzzer continues until either:
+Turning **Find Remote** on starts an alternating-pitch locator pattern. Beginning with v1.0.25, a 250 ms watchdog checks whether Find Remote is still on and whether the RTTTL player is idle. If the short locator phrase has ended, the watchdog starts it again. This avoids relying on the RTTTL completion callback and makes the locator continue until it is explicitly cancelled.
+
+Find Remote stops when either:
 
 - **Find Remote** is turned off in Home Assistant; or
 - any local input is detected on the Sticky: AI / Power, Volume Up, Volume Down, or any touchscreen press.
 
-A local press still performs its normal remote-control function; cancelling the locator does not consume the command.
+Local cancellation calls `switch.turn_off` on the same exposed **Find Remote** template switch. Because that switch is optimistic, ESPHome immediately publishes the new **Off** state back through the native API, so Home Assistant's Find Remote control also visibly turns off when the remote itself is pressed. The buzzer is stopped by the switch's normal turn-off action. The local press still performs its normal remote-control function; cancelling the locator does not consume the command.
 
 While **Find Remote** is active, the normal TV-off sleep path is inhibited so the remote cannot go to sleep and silence itself before it is found. When Find Remote is turned off, normal TV-state-driven sleep resumes. The switch uses `restore_mode: ALWAYS_OFF`, so rebooting or waking the Sticky cannot unexpectedly restart the buzzer.
 
@@ -90,7 +92,7 @@ Ordinary OTA updates and reboots still use normal ESPHome shutdown behavior; onl
 Beginning with v1.0.22, the old early boot `ready` message is removed. The firmware emits exactly one readiness line per boot:
 
 ```text
-Basement Remote firmware 1.0.24 ready
+Basement Remote firmware 1.0.25 ready
 ```
 
 That line is emitted only after:
@@ -141,7 +143,11 @@ The readiness check now runs through a `mode: single` script and immediately bec
 
 ### v1.0.24
 
-v1.0.24 adds Find Remote using the Sticky's GPIO48 buzzer. ESPHome LEDC drives the passive buzzer and RTTTL generates a repeating two-pitch locator pattern. The new Home Assistant switch is always restored off, local button/touch activity cancels it, and an active locator blocks automatic deep sleep until cancelled.
+v1.0.24 adds Find Remote using the Sticky's GPIO48 buzzer. ESPHome LEDC drives the passive buzzer and RTTTL generates a two-pitch locator pattern. The new Home Assistant switch is always restored off, local button/touch activity cancels it, and an active locator blocks automatic deep sleep until cancelled.
+
+### v1.0.25
+
+v1.0.25 fixes the locator stopping after a single short RTTTL phrase. The RTTTL completion callback is no longer used to recursively restart playback. A 250 ms watchdog instead restarts the locator whenever Find Remote is on and the RTTTL player is idle. Local button/touch cancellation turns the exposed Find Remote switch itself off, ensuring Home Assistant also receives and displays the Off state.
 
 ## Sticky hardware mapping
 
@@ -170,14 +176,14 @@ v1.0.24 adds Find Remote using the Sticky's GPIO48 buzzer. ESPHome LEDC drives t
 
 The Sticky uses 32 MB flash and 8 MB octal PSRAM.
 
-## v1.0.24 validation checklist
+## v1.0.25 validation checklist
 
-1. Compile v1.0.24 and confirm the previous `%u` / `long unsigned int` `-Wformat` warning remains absent.
+1. Compile v1.0.25 and confirm the previous `%u` / `long unsigned int` `-Wformat` warning remains absent.
 2. Boot and confirm GT911 reports **Address: 0x5D** with no communication/calibration failure.
-3. Confirm exactly one readiness line is emitted and it includes `1.0.24`.
-4. Turn **Find Remote** on in Home Assistant and confirm the buzzer repeats an alternating-pitch pattern continuously.
+3. Confirm exactly one readiness line is emitted and it includes `1.0.25`.
+4. Turn **Find Remote** on in Home Assistant and confirm the alternating-pitch locator continues indefinitely instead of stopping after one phrase.
 5. Turn **Find Remote** off in Home Assistant and confirm the buzzer stops immediately.
-6. Start Find Remote again, then press each physical button and a touchscreen control; confirm any local interaction cancels the locator while the normal remote action still executes.
+6. Start Find Remote again, then press AI / Power, either physical volume button, and a touchscreen control. Confirm each local interaction stops the buzzer, changes the Home Assistant **Find Remote** switch to **Off**, and still performs the normal remote action.
 7. With the TV off, confirm an active Find Remote session prevents deep sleep; after cancelling it, confirm the normal sleep sequence resumes.
 8. Confirm the remote's state-bearing ESPHome entities, including Find Remote, become **Unavailable** while asleep.
 9. Wake with a brief AI / Power tap and confirm the shared Home Assistant TV-on script turns the TV on.
