@@ -1,17 +1,16 @@
 # Basement Remote Sticky firmware
 #
-# v1.0.17 backs out the v1.0.15/v1.0.16 early PWR_HOLD/PWR_LOCK override that
-# could collapse the Sticky's power latch during wake. It keeps the last known
-# good v1.0.14 hardware wake sequence intact, adds only a GT911-only recovery
-# pulse after that known-good latch restoration, and keeps the shared Home
-# Assistant/Alexa TV-on recovery path.
+# v1.0.18 preserves the hardware-validated v1.0.14 board power-latch sequence,
+# keeps the shared Home Assistant/Alexa TV-on recovery path, and fixes the GT911
+# wake failure without cold-power-cycling the touchscreen on every deep-sleep
+# transition.
 #
-# This file is still the production package consumed by Device Builder.
+# This file is the production package consumed by Device Builder.
 
 substitutions:
   device_name: basement-remote-sticky
   friendly_name: Basement Remote Sticky
-  firmware_version: "1.0.17"
+  firmware_version: "1.0.18"
 
 packages:
   sticky_v1014_base:
@@ -21,35 +20,57 @@ packages:
       - esphome/basement-remote-sticky.yaml
     refresh: 0s
 
-# IMPORTANT: Do not release or manipulate GPIO45/GPIO46/GPIO47 here. The
-# hardware-validated v1.0.14 base owns the power-latch/display-rail sequence.
-# Its priority-900 boot step restores those retained levels at the timing that
-# has proven to wake the physical unit reliably.
+# The v1.0.14 base owns GPIO45/GPIO46/GPIO47 and the board power latch. Do not
+# manipulate those pins here.
 #
-# Touch recovery is isolated to GPIO42 only. By priority 700 the v1.0.14 base
-# has already released the retained GPIO42 hold and driven the touch rail high.
-# Cold-cycle only that rail before normal GT911 setup, leaving PWR_HOLD and
-# PWR_LOCK untouched.
+# v1.0.14 powered the GT911 rail off before deep sleep. Repeated hardware tests
+# showed that a cold GT911 start can leave ESPHome's touchscreen component
+# failed after wake. Keep GPIO42 powered and held HIGH through deep sleep instead.
+# The normal GT911 reset-pin sequence still runs on every boot.
 esphome:
-  on_boot:
+  on_shutdown:
     - priority: 700
       then:
         - lambda: |-
+            // The base shutdown has already disabled/held GPIO42 LOW. Override
+            // only that touch rail after the base shutdown action; leave the
+            // board power latch and e-paper rail completely untouched.
+            gpio_hold_dis(GPIO_NUM_42);
             gpio_set_direction(GPIO_NUM_42, GPIO_MODE_OUTPUT);
-            gpio_set_level(GPIO_NUM_42, 0);
-            delay(25);
             gpio_set_level(GPIO_NUM_42, 1);
-            delay(150);
-            ESP_LOGI("touch", "GT911-only recovery pulse complete; power latch untouched");
+            gpio_hold_en(GPIO_NUM_42);
+            gpio_deep_sleep_hold_en();
+            ESP_LOGI("touch", "GT911 power retained through deep sleep");
 
+  on_boot:
     - priority: -110
       then:
-        - logger.log: "Basement Remote v1.0.17 recovery initialization complete"
+        - logger.log: "Basement Remote v1.0.18 touch recovery initialization complete"
+
+# Do not scan the GT911 bus during startup. The controller is known and has a
+# dedicated bus; eliminating the scan removes an unnecessary transaction before
+# touchscreen initialization.
+i2c:
+  - id: !extend touch_i2c
+    scan: false
+
+# Initialize the GT911 only after the v1.0.14 priority-600 action has restored
+# the touch switch. The Sticky's controller uses 0x14. Supplying its known raw
+# dimensions also avoids the driver's separate startup calibration-register read,
+# another point where the current ESPHome GT911 driver can mark itself failed.
+touchscreen:
+  - id: !extend sticky_touch
+    setup_priority: 500
+    address: 0x14
+    calibration:
+      x_min: 0
+      x_max: 480
+      y_min: 0
+      y_max: 800
 
 # Home Assistant can authenticate the ESPHome API before it has subscribed to
-# device actions. Keep the reconnect path conservative and wait for a state-
-# subscribing Home Assistant client plus a short grace period before invoking
-# the shared TV-on script.
+# device actions. Wait for a state-subscribing Home Assistant client plus a
+# short grace period before invoking the shared TV-on script.
 api:
   id: remote_api
   on_client_connected:
@@ -61,9 +82,8 @@ api:
         then:
           - logger.log: "Home Assistant API subscription is ready for remote actions"
 
-# Keep the v1.0.14 physical GPIO4 deep-sleep wake configuration unchanged. Add
-# only a secondary recovery action after wake; this does not change the wake pin
-# or the known-good latch sequencing.
+# Keep the v1.0.14 GPIO4 wake source and power-latch sequencing unchanged. This
+# secondary recovery path handles slow Wi-Fi/API reconnects after a physical wake.
 deep_sleep:
   on_wake:
     - script.execute: wake_tv_after_reconnect
