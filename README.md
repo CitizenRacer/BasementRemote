@@ -184,4 +184,4 @@ Both targets require ESPHome 2026.8.2 or newer. `.github/workflows/esphome.yml` 
 - Keep UI artwork vendored under `assets/`.
 - Do not refresh e-paper for ordinary navigation, playback, volume, or app-launch presses unless visible UI state requires it.
 
-Paired change status: v1.0.22 firmware and documentation are intended to ship together as one code-changing commit.
+v1.0.22 finalization: the readiness/sleep/format changes and this documentation are paired in the same firmware revision.
