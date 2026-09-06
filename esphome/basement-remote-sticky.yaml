@@ -1,26 +1,131 @@
 # Basement Remote Sticky firmware
 #
-# v1.0.30 keeps the complete v1.0.29 behavior and removes the automatic
-# 10-minute e-paper refresh. The static remote face now refreshes only when
-# explicitly required: startup, low-battery threshold changes, manual refresh,
-# or the final sleep-screen render before deep sleep.
+# v1.0.31 keeps the complete v1.0.30 behavior and fixes the authoritative
+# readiness signal by observing the SSD1677 hardware BUSY line for the startup
+# refresh. Ready is not allowed until BUSY has asserted and then deasserted.
 
 substitutions:
   device_name: basement-remote-sticky
   friendly_name: Basement Remote Sticky
-  firmware_version: "1.0.30"
+  firmware_version: "1.0.31"
 
 packages:
-  sticky_v1029_base:
+  sticky_v1030_base:
     url: https://github.com/CitizenRacer/BasementRemote
-    ref: db04f04fdf0d8dca4b40499d230a97b9a3c08c6e
+    ref: 557254ecfd6a9efe06d341ecbc8334fa83a48cb9
     files:
       - esphome/basement-remote-sticky.yaml
     refresh: 0s
 
-# The normal remote face is static, so periodic full e-paper refreshes waste
-# energy without changing what the user sees. Explicit component.update calls
-# still handle startup, low-battery state changes, manual refresh, and sleep.
+# The epaper_spi preset owns GPIO18 as the SSD1677 BUSY input. Allow an internal
+# GPIO binary sensor to observe the same input so startup readiness can be tied
+# to the panel's real refresh lifecycle rather than Component::is_idle(), which
+# only reports whether ESPHome has disabled the component's loop.
 display:
   - id: !extend epaper_display
-    update_interval: never
+    busy_pin:
+      number: GPIO18
+      allow_other_uses: true
+
+# These flags are per-boot only. BUSY must first assert and later deassert before
+# startup_epaper_complete can become true, so an initially-idle panel cannot
+# satisfy the readiness gate before the startup refresh actually occurs.
+globals:
+  - id: startup_epaper_busy_seen
+    type: bool
+    restore_value: false
+    initial_value: "false"
+
+  - id: startup_epaper_complete
+    type: bool
+    restore_value: false
+    initial_value: "false"
+
+binary_sensor:
+  - platform: gpio
+    id: startup_epaper_busy
+    internal: true
+    pin:
+      number: GPIO18
+      allow_other_uses: true
+      mode:
+        input: true
+    on_press:
+      - if:
+          condition:
+            lambda: 'return !id(startup_epaper_complete);'
+          then:
+            - lambda: 'id(startup_epaper_busy_seen) = true;'
+            - logger.log:
+                level: DEBUG
+                format: "Startup e-paper BUSY asserted"
+    on_release:
+      - if:
+          condition:
+            lambda: |-
+              return id(startup_epaper_busy_seen) && !id(startup_epaper_complete);
+          then:
+            - lambda: 'id(startup_epaper_complete) = true;'
+            - logger.log:
+                level: DEBUG
+                format: "Startup e-paper BUSY cleared; panel refresh complete"
+
+# Replace the inherited v1.0.28 readiness script. v1.0.28 incorrectly treated
+# Component::is_idle() as a refresh-completion signal; it actually means only
+# that the component loop is disabled and can be true before a refresh starts.
+# v1.0.31 requires a full hardware BUSY high->low transition, then also checks
+# that the ESPHome display state machine has returned to idle.
+script:
+  - id: !remove report_ready_after_init
+
+  - id: report_ready_after_init
+    mode: single
+    then:
+      - if:
+          condition:
+            lambda: 'return !id(ready_logged);'
+          then:
+            - wait_until:
+                condition:
+                  and:
+                    - api.connected:
+                        state_subscription_only: true
+                    - lambda: |-
+                        const bool tv_state_ready =
+                            id(basement_tv_state).has_state() &&
+                            id(basement_tv_state).state != "unknown" &&
+                            id(basement_tv_state).state != "unavailable";
+                        const bool touch_ready =
+                            !id(sticky_touch).is_failed() &&
+                            (id(sticky_touch).is_in_loop_state() || id(sticky_touch).is_idle());
+                        const bool display_ready =
+                            id(startup_epaper_complete) &&
+                            !id(epaper_display).is_failed() &&
+                            id(epaper_display).is_idle();
+                        return tv_state_ready && touch_ready && display_ready;
+                timeout: 30s
+            - if:
+                condition:
+                  and:
+                    - api.connected:
+                        state_subscription_only: true
+                    - lambda: |-
+                        const bool tv_state_ready =
+                            id(basement_tv_state).has_state() &&
+                            id(basement_tv_state).state != "unknown" &&
+                            id(basement_tv_state).state != "unavailable";
+                        const bool touch_ready =
+                            !id(sticky_touch).is_failed() &&
+                            (id(sticky_touch).is_in_loop_state() || id(sticky_touch).is_idle());
+                        const bool display_ready =
+                            id(startup_epaper_complete) &&
+                            !id(epaper_display).is_failed() &&
+                            id(epaper_display).is_idle();
+                        return tv_state_ready && touch_ready && display_ready;
+                then:
+                  - logger.log: "Basement Remote firmware ${firmware_version} ready"
+                  - lambda: 'id(ready_logged) = true;'
+                else:
+                  - logger.log:
+                      level: ERROR
+                      format: "Basement Remote initialization incomplete after 30 seconds; not reporting ready"

@@ -6,7 +6,7 @@ Touchscreen e-paper TV remote firmware backed directly by Home Assistant over ES
 
 | Hardware | Firmware | Status |
 | --- | --- | --- |
-| Seeed Studio reTerminal Sticky | **v1.0.30** | Production target |
+| Seeed Studio reTerminal Sticky | **v1.0.31** | Production target |
 | M5Stack M5PaperMono Lite (C153-LITE) | **v0.1.0** | Initial bring-up / compile validated; hardware not yet available |
 
 The production Sticky source is [`esphome/basement-remote-sticky.yaml`](esphome/basement-remote-sticky.yaml). The PaperMono target remains separate.
@@ -118,17 +118,18 @@ Production behavior retains these validated fixes:
 The old early boot `ready` message is removed. Firmware emits exactly one readiness line per boot:
 
 ```text
-Basement Remote firmware 1.0.30 ready
+Basement Remote firmware 1.0.31 ready
 ```
 
-Beginning with **v1.0.28**, that line is emitted only after all of the following are true:
+Beginning with **v1.0.31**, that line is emitted only after all of the following are true:
 
 - a Home Assistant state-subscribing API client is connected;
 - **TV State Seen By Remote** has received a real value rather than `unknown`/`unavailable`;
-- the GT911 touchscreen has completed component setup and has not failed; and
-- the initial asynchronous e-paper refresh has fully completed and the display driver has returned to its idle state.
+- the GT911 touchscreen has completed component setup and has not failed;
+- the SSD1677 hardware **BUSY** signal on GPIO18 has asserted during the startup refresh and then deasserted, proving that the physical panel refresh completed; and
+- the ESPHome e-paper component has subsequently returned to its idle state.
 
-This fixes a latent race exposed by the 160 MHz change: the previous readiness test checked only that the display had not failed, so it could log `ready` while the startup e-paper refresh was still running. The new check uses the e-paper component's actual idle/completion state instead of an arbitrary delay.
+The v1.0.28 readiness change attempted to use `Component::is_idle()` as the display-completion signal. That was not sufficiently authoritative: in ESPHome, `Component::is_idle()` means that the component loop is disabled and can be true before the startup refresh has actually begun. v1.0.31 therefore observes the panel's hardware BUSY high→low transition and uses component idle only as a final software-state check after that hardware completion event.
 
 Readiness checks are serialized through a `mode: single` script so Device Builder's live logger or other transient API clients cannot produce duplicate/spurious post-ready initialization errors. If the complete readiness criteria are not satisfied within 30 seconds, firmware logs an initialization error and deliberately does not claim to be ready.
 
@@ -159,25 +160,26 @@ Readiness checks are serialized through a `mode: single` script so Device Builde
 
 The Sticky uses 32 MB flash and 8 MB octal PSRAM. While awake, production firmware runs the ESP32-S3 at 160 MHz.
 
-## v1.0.30 validation checklist
+## v1.0.31 validation checklist
 
-1. Compile v1.0.30 and confirm the previous `%u` / `long unsigned int` `-Wformat` warning remains absent.
+1. Compile v1.0.31 and confirm the previous `%u` / `long unsigned int` `-Wformat` warning remains absent.
 2. Confirm the generated ESP32 configuration uses a **160 MHz** CPU frequency.
 3. Confirm the logger configuration has physical UART output disabled (`baud_rate: 0`) while DEBUG/API logging remains available.
 4. Confirm `epaper_display` uses `update_interval: never` and no periodic full refresh occurs while the TV remains on.
 5. Boot and confirm GT911 reports **Address: 0x5D** with no communication/calibration failure.
-6. Confirm the initial e-paper refresh fully finishes before `Basement Remote firmware 1.0.30 ready` is logged.
-7. Confirm exactly one readiness line is emitted per boot and that it includes `1.0.30`.
-8. Confirm the low-battery threshold change still refreshes the battery glyph and **Refresh E-Paper** still forces a refresh.
-9. With the TV on, confirm touchscreen navigation, app launchers, and physical volume controls remain immediately responsive and Home Assistant stays connected.
-10. Turn **Find Remote** on and confirm the alternating-pitch locator repeats continuously.
-11. Confirm continuous Find Remote playback does **not** flood API logs with RTTTL `Playing song` / `Playback finished` DEBUG lines.
-12. Turn **Find Remote** off in Home Assistant and confirm the buzzer stops immediately.
-13. Start Find Remote again, press a physical/touch control, and confirm the buzzer stops and Home Assistant's Find Remote switch changes to **Off**.
-14. With the TV off, confirm Find Remote blocks deep sleep while active and normal sleep resumes after cancellation.
-15. Confirm state-bearing entities become **Unavailable** while asleep and return after wake.
-16. Wake with a brief AI / Power tap and confirm the shared Home Assistant TV-on script turns the TV on.
-17. Confirm touchscreen and physical volume controls still work after repeated sleep/wake cycles.
+6. Confirm startup logs show `Startup e-paper BUSY asserted` followed later by `Startup e-paper BUSY cleared; panel refresh complete`.
+7. Confirm `Basement Remote firmware 1.0.31 ready` occurs only after the BUSY-cleared message and the startup e-paper refresh is visibly complete.
+8. Confirm exactly one readiness line is emitted per boot and that it includes `1.0.31`.
+9. Confirm the low-battery threshold change still refreshes the battery glyph and **Refresh E-Paper** still forces a refresh.
+10. With the TV on, confirm touchscreen navigation, app launchers, and physical volume controls remain immediately responsive and Home Assistant stays connected.
+11. Turn **Find Remote** on and confirm the alternating-pitch locator repeats continuously.
+12. Confirm continuous Find Remote playback does **not** flood API logs with RTTTL `Playing song` / `Playback finished` DEBUG lines.
+13. Turn **Find Remote** off in Home Assistant and confirm the buzzer stops immediately.
+14. Start Find Remote again, press a physical/touch control, and confirm the buzzer stops and Home Assistant's Find Remote switch changes to **Off**.
+15. With the TV off, confirm Find Remote blocks deep sleep while active and normal sleep resumes after cancellation.
+16. Confirm state-bearing entities become **Unavailable** while asleep and return after wake.
+17. Wake with a brief AI / Power tap and confirm the shared Home Assistant TV-on script turns the TV on.
+18. Confirm touchscreen and physical volume controls still work after repeated sleep/wake cycles.
 
 # M5PaperMono Lite
 
