@@ -1,24 +1,97 @@
 # Basement Remote Sticky firmware
 #
-# v1.0.34 keeps the complete v1.0.33 behavior and increases awake Wi-Fi power
-# savings for the remote's intended same-room, pinned access point. Fast connect
-# remains enabled, Wi-Fi power saving moves to HIGH, and TX power is limited to
-# ESPHome's supported minimum of 8.5 dB.
+# v1.0.35 keeps the complete v1.0.34 behavior and adds ESP-IDF dynamic
+# frequency scaling plus automatic light sleep while the TV is on. The CPU can
+# idle down from 160 MHz to the 40 MHz crystal frequency, and the ESP32-S3 may
+# enter light sleep whenever FreeRTOS is idle. Power, volume, and GT911 touch
+# interrupt GPIOs are explicit light-sleep wake sources. TV-off deep sleep is
+# unchanged.
 
 substitutions:
   device_name: basement-remote-sticky
   friendly_name: Basement Remote Sticky
-  firmware_version: "1.0.34"
+  firmware_version: "1.0.35"
 
 packages:
-  sticky_v1033_base:
+  sticky_v1034_base:
     url: https://github.com/CitizenRacer/BasementRemote
-    ref: 375d1b8d1bfb4d92061baa954f137207350822bb
+    ref: 1d42b02d0da8c71eadae9aac80f0584d687bc516
     files:
       - esphome/basement-remote-sticky.yaml
     refresh: 0s
 
-wifi:
-  fast_connect: true
-  power_save_mode: HIGH
-  output_power: 8.5dB
+# Automatic light sleep requires ESP-IDF power management and FreeRTOS
+# tickless-idle support at compile time. Keep the inherited 160 MHz maximum;
+# esp_pm_configure() below supplies the 40 MHz idle floor.
+esp32:
+  framework:
+    sdkconfig_options:
+      CONFIG_PM_ENABLE: "y"
+      CONFIG_FREERTOS_USE_TICKLESS_IDLE: "y"
+
+esphome:
+  includes:
+    - <esp_pm.h>
+    - <esp_sleep.h>
+    - <driver/gpio.h>
+  on_boot:
+    # Do not alter the validated startup/display/readiness path. Once normal
+    # initialization has had time to complete, enable GPIO wake and automatic
+    # light sleep for the long TV-on idle periods.
+    - priority: -200
+      then:
+        - delay: 20s
+        - lambda: |-
+            const struct {
+              gpio_num_t pin;
+              const char *name;
+            } wake_pins[] = {
+              {GPIO_NUM_4, "AI / Power"},
+              {GPIO_NUM_5, "Volume Up"},
+              {GPIO_NUM_6, "Volume Down"},
+              {GPIO_NUM_21, "GT911 INT"},
+            };
+
+            for (const auto &wake_pin : wake_pins) {
+              const esp_err_t err =
+                  gpio_wakeup_enable(wake_pin.pin, GPIO_INTR_LOW_LEVEL);
+              if (err != ESP_OK) {
+                ESP_LOGE("power",
+                         "Failed to enable light-sleep wake on %s GPIO%d: %s",
+                         wake_pin.name, static_cast<int>(wake_pin.pin),
+                         esp_err_to_name(err));
+                return;
+              }
+            }
+
+            esp_err_t err = esp_sleep_enable_gpio_wakeup();
+            if (err != ESP_OK) {
+              ESP_LOGE("power", "Failed to enable GPIO light-sleep wake: %s",
+                       esp_err_to_name(err));
+              return;
+            }
+
+            esp_pm_config_t pm_config{};
+            pm_config.max_freq_mhz = 160;
+            pm_config.min_freq_mhz = 40;
+            pm_config.light_sleep_enable = true;
+
+            err = esp_pm_configure(&pm_config);
+            if (err != ESP_OK) {
+              ESP_LOGE("power",
+                       "Automatic light sleep / DFS could not be enabled: %s",
+                       esp_err_to_name(err));
+              return;
+            }
+
+            esp_pm_config_t active_config{};
+            if (esp_pm_get_configuration(&active_config) == ESP_OK) {
+              ESP_LOGI("power",
+                       "Automatic light sleep enabled; CPU range %d-%d MHz; "
+                       "wake GPIOs 4/5/6/21",
+                       active_config.min_freq_mhz, active_config.max_freq_mhz);
+            } else {
+              ESP_LOGI("power",
+                       "Automatic light sleep enabled; CPU range 40-160 MHz; "
+                       "wake GPIOs 4/5/6/21");
+            }
