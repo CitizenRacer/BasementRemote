@@ -1,22 +1,48 @@
 # Basement Remote Sticky firmware
 #
-# v1.0.39 is a one-time ESPHome 2026.9.0 OTA-encryption migration bridge.
-# It keeps the complete v1.0.38 behavior, including the BQ27220 diagnostics,
-# while deliberately retaining the existing OTA password for this one install.
-# ESPHome 2026.9.0 will then offer encrypted OTA using the existing native API
-# encryption key, allowing the following release to require OTA encryption and
-# remove the separate OTA password without locking out an already-installed
-# device that was previously running ESPHome 2026.8.2.
+# v1.0.40 keeps the complete v1.0.39 behavior and fixes charging on the
+# reTerminal Sticky. GPIO39 is the hardware charger-enable signal and is
+# active-low. Previous BasementRemote firmware never configured that pin, so
+# USB could be present with a green LED while the BQ27220 still showed a low
+# battery voltage and zero charge current. Keep GPIO39 asserted while awake and
+# held through deep sleep so the battery can charge whenever USB power is present.
 
 substitutions:
   device_name: basement-remote-sticky
   friendly_name: Basement Remote Sticky
-  firmware_version: "1.0.39"
+  firmware_version: "1.0.40"
 
 packages:
-  sticky_v1038_base:
+  sticky_v1039_base:
     url: https://github.com/CitizenRacer/BasementRemote
-    ref: d7cce37d29b8afaf19bcd5d39d77ff209183909b
+    ref: d73049009a24058e8bb81fc1b98a371e06ec9283
     files:
       - esphome/basement-remote-sticky.yaml
     refresh: 0s
+
+# Sticky charger enable is GPIO39, active low. Keep this internal so Home
+# Assistant cannot accidentally disable charging. ALWAYS_ON means logical ON,
+# which drives the inverted GPIO low and enables the charger.
+switch:
+  - platform: gpio
+    id: sticky_charge_enable
+    pin:
+      number: GPIO39
+      inverted: true
+    internal: true
+    restore_mode: ALWAYS_ON
+
+# Preserve the charger-enable output through TV-off deep sleep. The inherited
+# power path already enables global digital-GPIO deep-sleep hold for the power
+# latch pins; add GPIO39 to the per-pin hold set and release that hold first on
+# the next boot so the GPIO switch can own the pin again.
+esphome:
+  on_boot:
+    - priority: 950
+      then:
+        - lambda: |-
+            gpio_hold_dis(GPIO_NUM_39);
+  on_shutdown:
+    then:
+      - lambda: |-
+          gpio_hold_en(GPIO_NUM_39);

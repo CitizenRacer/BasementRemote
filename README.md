@@ -6,7 +6,7 @@ Touchscreen e-paper TV remote firmware backed directly by Home Assistant over ES
 
 | Hardware | Firmware | Status |
 | --- | --- | --- |
-| Seeed Studio reTerminal Sticky | **v1.0.39** | Production target / OTA-encryption migration bridge |
+| Seeed Studio reTerminal Sticky | **v1.0.40** | Production target / charger fix / OTA-encryption migration bridge |
 | M5Stack M5PaperMono Lite (C153-LITE) | **v0.1.0** | Initial bring-up / compile validated; hardware not yet available |
 
 The production Sticky source is [`esphome/basement-remote-sticky.yaml`](esphome/basement-remote-sticky.yaml). `CitizenRacer/BasementRemote` is the canonical source of truth.
@@ -53,7 +53,7 @@ Production behavior retains the known-good touch path:
 The authoritative readiness line is:
 
 ```text
-Basement Remote firmware 1.0.39 ready
+Basement Remote firmware 1.0.40 ready
 ```
 
 Readiness waits for Home Assistant state subscription, a valid TV state, a healthy touchscreen component, and proof that the startup SSD1677 refresh reached hardware and completed.
@@ -72,11 +72,27 @@ Beginning with v1.0.38, the firmware also exposes these read-only diagnostics on
 
 These are diagnostic reads only. Do not write a new BQ27220 profile until the reported Remaining Capacity, Full Charge Capacity, Design Capacity, State of Health, voltage, current, and status have been reviewed together.
 
+## Charger enable fix
+
+The reTerminal Sticky uses **GPIO39 as an active-low charger-enable signal**. Earlier BasementRemote firmware never configured GPIO39. The failure signature observed on hardware was USB connected with a green indicator while the BQ27220 still reported **3.425 V, 0 mA, 7% SOC, 491 mAh remaining, and 7,500 mAh full/design capacity**. A 3.425 V single-cell Li-ion battery is not physically full; the zero current showed that the charger was disabled rather than that charging had completed.
+
+Beginning with **v1.0.40**:
+
+- GPIO39 is configured as an internal ESPHome GPIO switch with `inverted: true` and `restore_mode: ALWAYS_ON`;
+- logical ON therefore drives GPIO39 low and enables the charger;
+- the charger control is not exposed to Home Assistant, preventing accidental user disable;
+- GPIO39 is included in the deep-sleep GPIO hold set so charging remains enabled while the TV-off remote is asleep;
+- the GPIO39 hold is released early on wake so ESPHome can resume normal control of the pin.
+
+After installing v1.0.40 while USB remains connected, the expected immediate behavior is that Battery Current becomes positive and Battery Voltage begins rising. The charging LED should indicate active charging until the cell actually reaches charge termination. Only after normal charging behavior is confirmed should the BQ27220's SOC/capacity configuration be reconsidered.
+
 ## OTA encryption migration
 
-ESPHome 2026.9.0 adds encrypted OTA using the same Noise key as the native API. The installed Sticky previously ran firmware built with ESPHome 2026.8.2, which cannot offer the new encrypted OTA protocol. Requiring encryption immediately would therefore risk locking out OTA updates.
+ESPHome 2026.9.0 adds encrypted OTA using the same Noise key as the native API. The Sticky previously ran firmware built with ESPHome 2026.8.2, which cannot offer the new encrypted OTA protocol. Requiring encryption immediately would risk locking out OTA updates.
 
-**v1.0.39 is the one-time migration bridge.** It must be built with ESPHome 2026.9.0 and deliberately retains the existing OTA password for this install. Once v1.0.39 is running, ESPHome 2026.9.0 can offer encrypted OTA using `basement_remote_api_encryption_key` while still accepting the legacy authenticated path. The next firmware release will remove the OTA password and require:
+v1.0.39 introduced the migration bridge. **v1.0.40 deliberately keeps that bridge behavior** so the charger fix remains installable whether the device is currently on v1.0.38 or v1.0.39. The existing OTA password therefore remains for this release while ESPHome 2026.9.0 can offer encrypted OTA using `basement_remote_api_encryption_key`.
+
+After v1.0.40 is confirmed running, a later release can safely remove the OTA password and require:
 
 ```yaml
 ota:
@@ -84,9 +100,7 @@ ota:
     encryption:
 ```
 
-Do not manually remove `ota_password` from the Device Builder wrapper or `secrets.yaml` before v1.0.39 has been installed successfully. The password-related warning during this transition build is expected once; after the encrypted-OTA requirement is enabled in the following release, the separate OTA password will no longer be needed.
-
-After installing v1.0.39, check the device log for ESPHome's encryption-offer message before moving to the final migration release.
+The password-related flash/RAM warning is therefore still expected for this transition release.
 
 ## Sticky hardware mapping
 
@@ -94,11 +108,10 @@ After installing v1.0.39, check the device log for ESPHome's encryption-offer me
 | --- | ---: |
 | Sensor I²C SCL / BQ27220 | 0 |
 | Sensor I²C SDA / BQ27220 | 1 |
-| Touch SCL | 2 |
-| Touch SDA | 3 |
 | AI / Power button | 4 |
 | Volume Up button | 5 |
 | Volume Down button | 6 |
+| External power detect | 9 |
 | E-paper SCK | 13 |
 | E-paper MOSI / SDI | 14 |
 | E-paper CS | 15 |
@@ -106,6 +119,7 @@ After installing v1.0.39, check the device log for ESPHome's encryption-offer me
 | E-paper RST | 17 |
 | E-paper BUSY | 18 |
 | Touch INT | 21 |
+| Charger enable (active low) | 39 |
 | Touch RST | 41 |
 | Touch EN | 42 |
 | PWR_HOLD | 45 |
@@ -115,15 +129,19 @@ After installing v1.0.39, check the device log for ESPHome's encryption-offer me
 
 The Sticky uses 32 MB flash and 8 MB octal PSRAM.
 
-## v1.0.39 validation checklist
+## v1.0.40 validation checklist
 
-1. Build and install v1.0.39 with ESPHome 2026.9.0 using the existing OTA password path.
-2. Confirm the device boots and logs `Basement Remote firmware 1.0.39 ready`.
-3. Confirm ESPHome reports that OTA encryption is offered while the migration password remains accepted.
-4. Confirm touchscreen input remains responsive immediately after boot and after idle periods.
-5. Confirm Volume Up, Volume Down, AI / Power short/long press, app launchers, Find Remote, sleep-screen rendering, and deep-sleep wake remain unchanged.
-6. Record Battery Level, Voltage, Current, Remaining Capacity, Full Charge Capacity, Design Capacity, State of Health, and Status Raw while the charge LED is green.
-7. Only after v1.0.39 is confirmed running should the following release remove the OTA password and require encryption.
+1. Install v1.0.40 with USB still connected.
+2. Confirm the device boots and logs `Basement Remote firmware 1.0.40 ready`.
+3. Confirm touchscreen input remains responsive immediately after boot and after idle periods.
+4. Watch Battery Current: it should move above 0 mA once charging begins.
+5. Watch Battery Voltage: it should rise above the observed 3.425 V rather than staying flat.
+6. Confirm the charge LED indicates active charging until actual charge termination.
+7. Confirm Battery Level and Remaining Capacity increase during charging.
+8. After the TV is turned off and the remote enters deep sleep, leave USB connected and confirm charging continues across the sleep interval.
+9. Wake with AI / Power and confirm charging telemetry resumes normally.
+10. Confirm Volume Up, Volume Down, AI / Power short/long press, app launchers, Find Remote, sleep-screen rendering, and deep-sleep wake remain unchanged.
+11. Keep the existing OTA password for this release; encrypted-only OTA migration is deferred until v1.0.40 is confirmed installed.
 
 # M5PaperMono Lite
 
