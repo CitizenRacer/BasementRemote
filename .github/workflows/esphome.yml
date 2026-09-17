@@ -30,8 +30,8 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Install ESPHome 2026.8.2
-        run: python -m pip install "esphome==2026.8.2"
+      - name: Install ESPHome 2026.9.0
+        run: python -m pip install "esphome==2026.9.0"
 
       - name: Create CI-only ESPHome secrets
         shell: bash

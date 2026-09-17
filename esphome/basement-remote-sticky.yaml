@@ -1,119 +1,22 @@
 # Basement Remote Sticky firmware
 #
-# v1.0.38 keeps the complete v1.0.37 touch/power behavior and adds read-only
-# BQ27220 fuel-gauge diagnostics so an implausible SOC can be traced to the
-# gauge's reported capacity/configuration before any configuration is written.
+# v1.0.39 is a one-time ESPHome 2026.9.0 OTA-encryption migration bridge.
+# It keeps the complete v1.0.38 behavior, including the BQ27220 diagnostics,
+# while deliberately retaining the existing OTA password for this one install.
+# ESPHome 2026.9.0 will then offer encrypted OTA using the existing native API
+# encryption key, allowing the following release to require OTA encryption and
+# remove the separate OTA password without locking out an already-installed
+# device that was previously running ESPHome 2026.8.2.
 
 substitutions:
   device_name: basement-remote-sticky
   friendly_name: Basement Remote Sticky
-  firmware_version: "1.0.38"
+  firmware_version: "1.0.39"
 
 packages:
-  sticky_v1037_base:
+  sticky_v1038_base:
     url: https://github.com/CitizenRacer/BasementRemote
-    ref: 539dc6606ecc744950c763b2e2cd0d618df29abe
+    ref: d7cce37d29b8afaf19bcd5d39d77ff209183909b
     files:
       - esphome/basement-remote-sticky.yaml
     refresh: 0s
-
-# Read-only BQ27220 standard-command diagnostics. The existing battery level,
-# voltage, and current sensors remain unchanged. These extra entities expose the
-# values needed to determine whether the gauge is using the wrong capacity
-# profile or has otherwise learned an implausible full-charge capacity.
-sensor:
-  - platform: template
-    id: battery_remaining_capacity
-    name: "Battery Remaining Capacity"
-    unit_of_measurement: "mAh"
-    state_class: measurement
-    accuracy_decimals: 0
-    entity_category: diagnostic
-    update_interval: 60s
-    lambda: |-
-      uint8_t reg = 0x10;
-      uint8_t raw[2] = {0, 0};
-      auto err = id(sensor_i2c).write_readv(0x55, &reg, 1, raw, 2);
-      if (err != esphome::i2c::ERROR_OK) {
-        return NAN;
-      }
-      const uint16_t value = static_cast<uint16_t>(raw[0]) |
-                             (static_cast<uint16_t>(raw[1]) << 8);
-      return static_cast<float>(value);
-
-  - platform: template
-    id: battery_full_charge_capacity
-    name: "Battery Full Charge Capacity"
-    unit_of_measurement: "mAh"
-    state_class: measurement
-    accuracy_decimals: 0
-    entity_category: diagnostic
-    update_interval: 60s
-    lambda: |-
-      uint8_t reg = 0x12;
-      uint8_t raw[2] = {0, 0};
-      auto err = id(sensor_i2c).write_readv(0x55, &reg, 1, raw, 2);
-      if (err != esphome::i2c::ERROR_OK) {
-        return NAN;
-      }
-      const uint16_t value = static_cast<uint16_t>(raw[0]) |
-                             (static_cast<uint16_t>(raw[1]) << 8);
-      return static_cast<float>(value);
-
-  - platform: template
-    id: battery_state_of_health
-    name: "Battery State of Health"
-    unit_of_measurement: "%"
-    state_class: measurement
-    accuracy_decimals: 0
-    entity_category: diagnostic
-    update_interval: 60s
-    lambda: |-
-      uint8_t reg = 0x2E;
-      uint8_t raw[2] = {0, 0};
-      auto err = id(sensor_i2c).write_readv(0x55, &reg, 1, raw, 2);
-      if (err != esphome::i2c::ERROR_OK) {
-        return NAN;
-      }
-      const uint16_t value = static_cast<uint16_t>(raw[0]) |
-                             (static_cast<uint16_t>(raw[1]) << 8);
-      if (value > 100) {
-        return NAN;
-      }
-      return static_cast<float>(value);
-
-  - platform: template
-    id: battery_design_capacity
-    name: "Battery Design Capacity"
-    unit_of_measurement: "mAh"
-    state_class: measurement
-    accuracy_decimals: 0
-    entity_category: diagnostic
-    update_interval: 60s
-    lambda: |-
-      uint8_t reg = 0x3C;
-      uint8_t raw[2] = {0, 0};
-      auto err = id(sensor_i2c).write_readv(0x55, &reg, 1, raw, 2);
-      if (err != esphome::i2c::ERROR_OK) {
-        return NAN;
-      }
-      const uint16_t value = static_cast<uint16_t>(raw[0]) |
-                             (static_cast<uint16_t>(raw[1]) << 8);
-      return static_cast<float>(value);
-
-  - platform: template
-    id: battery_status_raw
-    name: "Battery Status Raw"
-    accuracy_decimals: 0
-    entity_category: diagnostic
-    update_interval: 60s
-    lambda: |-
-      uint8_t reg = 0x0A;
-      uint8_t raw[2] = {0, 0};
-      auto err = id(sensor_i2c).write_readv(0x55, &reg, 1, raw, 2);
-      if (err != esphome::i2c::ERROR_OK) {
-        return NAN;
-      }
-      const uint16_t value = static_cast<uint16_t>(raw[0]) |
-                             (static_cast<uint16_t>(raw[1]) << 8);
-      return static_cast<float>(value);
