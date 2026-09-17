@@ -1,134 +1,62 @@
 # Basement Remote Sticky firmware
 #
-# v1.0.36 keeps the complete v1.0.35 behavior and fixes the TV-off sleep-screen
-# regression without replacing any inherited sleep scripts. Automatic light
-# sleep remains enabled for normal TV-on idle time, but a small power-management
-# guard disables it and fixes the CPU at 160 MHz whenever the confirmed TV-off
-# path is eligible to render the final e-paper sleep face. This restores the
-# fully-awake timing assumptions used by the validated pre-v1.0.35 sleep path.
+# v1.0.37 restores touchscreen reliability by backing out automatic ESP32-S3
+# light sleep, which was introduced in v1.0.35 and made GT911 touch wake
+# unreliable. The firmware returns to the validated v1.0.34 behavior as its
+# base, then re-enables dynamic frequency scaling only: 40-160 MHz while awake,
+# with automatic light sleep disabled. TV-off deep sleep and the approved sleep
+# screen therefore use the same known-good path that predates the regression.
 
 substitutions:
   device_name: basement-remote-sticky
   friendly_name: Basement Remote Sticky
-  firmware_version: "1.0.36"
+  firmware_version: "1.0.37"
 
 packages:
-  sticky_v1035_base:
+  sticky_v1034_base:
     url: https://github.com/CitizenRacer/BasementRemote
-    ref: fb9a38fc1cc0d9b1c8a4d373d3f95683804a6023
+    ref: 1d42b02d0da8c71eadae9aac80f0584d687bc516
     files:
       - esphome/basement-remote-sticky.yaml
     refresh: 0s
 
-globals:
-  # True while v1.0.36 owns the ESP-IDF PM configuration for the TV-off render
-  # path. This is RAM-only and therefore clears naturally after deep-sleep wake.
-  - id: sleep_pm_guard_active_v1036
-    type: bool
-    restore_value: false
-    initial_value: "false"
+# Keep the CPU-frequency power saving from the v1.0.35 experiment, but do not
+# allow automatic light sleep. The GT911 remains continuously serviced while
+# the TV is on, so touchscreen input no longer depends on GPIO21 successfully
+# waking the ESP32-S3 from automatic light sleep.
+esp32:
+  framework:
+    sdkconfig_options:
+      CONFIG_PM_ENABLE: "y"
 
-  # Suppress repeated error logs while the 250 ms watchdog keeps retrying a
-  # failed esp_pm_configure() call.
-  - id: sleep_pm_guard_error_logged_v1036
-    type: bool
-    restore_value: false
-    initial_value: "false"
+esphome:
+  includes:
+    - <esp_pm.h>
+  on_boot:
+    - priority: -200
+      then:
+        # Preserve the known-good startup/readiness path before changing CPU PM.
+        - delay: 20s
+        - lambda: |-
+            esp_pm_config_t pm_config{};
+            pm_config.max_freq_mhz = 160;
+            pm_config.min_freq_mhz = 40;
+            pm_config.light_sleep_enable = false;
 
-interval:
-  # v1.0.35 introduced automatic ESP32-S3 light sleep. The inherited TV-off
-  # renderer deliberately waits 10 seconds after starting the asynchronous
-  # SSD1677 full refresh, but before v1.0.36 nothing prevented automatic light
-  # sleep from occurring during that final refresh window.
-  #
-  # Keep normal TV-on power savings unchanged. Once the TV is confirmed off and
-  # the remote is actually eligible to sleep, force 160 MHz / no automatic
-  # light sleep. Re-check the active PM configuration every 250 ms so the guard
-  # also wins the narrow race where v1.0.35's one-shot 20-second PM setup fires
-  # during the TV-off debounce. Once sleep_display_active becomes true, retain
-  # the guard unconditionally until deep sleep resets the chip.
-  - interval: 250ms
-    then:
-      - lambda: |-
-          const bool tv_off_and_sleep_eligible =
-              id(basement_tv_state).has_state() &&
-              id(basement_tv_state).state == "off" &&
-              !id(tv_wake_in_progress) &&
-              !id(find_remote).state;
-
-          const bool guard_needed =
-              id(sleep_display_active) || tv_off_and_sleep_eligible;
-
-          if (guard_needed) {
-            esp_pm_config_t active_config{};
-            const esp_err_t get_err = esp_pm_get_configuration(&active_config);
-            const bool already_guarded =
-                get_err == ESP_OK &&
-                active_config.max_freq_mhz == 160 &&
-                active_config.min_freq_mhz == 160 &&
-                !active_config.light_sleep_enable;
-
-            if (!already_guarded) {
-              esp_pm_config_t render_config{};
-              render_config.max_freq_mhz = 160;
-              render_config.min_freq_mhz = 160;
-              render_config.light_sleep_enable = false;
-
-              const esp_err_t err = esp_pm_configure(&render_config);
-              if (err != ESP_OK) {
-                if (!id(sleep_pm_guard_error_logged_v1036)) {
-                  ESP_LOGE("power",
-                           "TV-off e-paper guard could not disable automatic light sleep: %s",
-                           esp_err_to_name(err));
-                  id(sleep_pm_guard_error_logged_v1036) = true;
-                }
-                return;
-              }
-            }
-
-            id(sleep_pm_guard_error_logged_v1036) = false;
-            if (!id(sleep_pm_guard_active_v1036)) {
-              ESP_LOGI("power",
-                       "TV-off e-paper guard active; automatic light sleep disabled; CPU fixed at 160 MHz");
-              id(sleep_pm_guard_active_v1036) = true;
-            }
-            return;
-          }
-
-          if (!id(sleep_pm_guard_active_v1036) &&
-              !id(sleep_pm_guard_error_logged_v1036)) {
-            return;
-          }
-
-          #ifdef USE_ESP32
-          // Preserve v1.0.35's deliberate first-20-seconds fully-awake startup
-          // window if the TV briefly reports off during boot and then recovers.
-          if (millis() < 20000UL) {
-            ESP_LOGD("power",
-                     "TV-off e-paper guard released during startup; normal light sleep remains deferred");
-            id(sleep_pm_guard_active_v1036) = false;
-            id(sleep_pm_guard_error_logged_v1036) = false;
-            return;
-          }
-          #endif
-
-          esp_pm_config_t normal_config{};
-          normal_config.max_freq_mhz = 160;
-          normal_config.min_freq_mhz = 40;
-          normal_config.light_sleep_enable = true;
-
-          const esp_err_t err = esp_pm_configure(&normal_config);
-          if (err != ESP_OK) {
-            if (!id(sleep_pm_guard_error_logged_v1036)) {
+            const esp_err_t err = esp_pm_configure(&pm_config);
+            if (err != ESP_OK) {
               ESP_LOGE("power",
-                       "TV-off e-paper guard could not restore automatic light sleep: %s",
+                       "Dynamic frequency scaling could not be enabled: %s",
                        esp_err_to_name(err));
-              id(sleep_pm_guard_error_logged_v1036) = true;
+              return;
             }
-            return;
-          }
 
-          ESP_LOGI("power",
-                   "TV-off e-paper guard released; automatic light sleep restored; CPU range 40-160 MHz");
-          id(sleep_pm_guard_active_v1036) = false;
-          id(sleep_pm_guard_error_logged_v1036) = false;
+            esp_pm_config_t active_config{};
+            if (esp_pm_get_configuration(&active_config) == ESP_OK) {
+              ESP_LOGI("power",
+                       "Dynamic frequency scaling enabled; CPU range %d-%d MHz; automatic light sleep disabled",
+                       active_config.min_freq_mhz, active_config.max_freq_mhz);
+            } else {
+              ESP_LOGI("power",
+                       "Dynamic frequency scaling enabled; CPU range 40-160 MHz; automatic light sleep disabled");
+            }

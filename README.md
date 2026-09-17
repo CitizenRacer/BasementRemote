@@ -6,7 +6,7 @@ Touchscreen e-paper TV remote firmware backed directly by Home Assistant over ES
 
 | Hardware | Firmware | Status |
 | --- | --- | --- |
-| Seeed Studio reTerminal Sticky | **v1.0.36** | Production target |
+| Seeed Studio reTerminal Sticky | **v1.0.37** | Production target |
 | M5Stack M5PaperMono Lite (C153-LITE) | **v0.1.0** | Initial bring-up / compile validated; hardware not yet available |
 
 The production Sticky source is [`esphome/basement-remote-sticky.yaml`](esphome/basement-remote-sticky.yaml). The PaperMono target remains separate.
@@ -50,9 +50,9 @@ Normal remote commands do not refresh the e-paper display unless visible state n
 
 Beginning with **v1.0.27**, the reTerminal Sticky runs the ESP32-S3 at a maximum of **160 MHz** while awake instead of the 240 MHz default.
 
-Beginning with **v1.0.35**, ESP-IDF power management and FreeRTOS tickless idle are enabled. After the first 20 seconds of boot, dynamic frequency scaling allows the CPU to run from **40–160 MHz** and automatic ESP32-S3 light sleep is enabled whenever the system is idle. GPIO4 (AI / Power), GPIO5 (Volume Up), GPIO6 (Volume Down), and GPIO21 (GT911 touch interrupt) are active-low light-sleep wake sources. Wi-Fi remains associated and the native Home Assistant API remains connected during TV-on light sleep.
+**v1.0.35 introduced automatic ESP32-S3 light sleep and GPIO wake sources for AI / Power, Volume Up, Volume Down, and GT911 touch interrupt. That experiment caused a touchscreen responsiveness regression and is no longer part of production firmware.**
 
-Beginning with **v1.0.36**, automatic light sleep is deliberately suspended during the final TV-off e-paper render window. Normal TV-on power savings are unchanged.
+Beginning with **v1.0.37**, the firmware returns to the validated v1.0.34 touch/sleep base and keeps only ESP-IDF dynamic frequency scaling: the CPU may scale from **40–160 MHz**, but `light_sleep_enable` is explicitly false. The GT911 therefore remains continuously serviced while the TV is on and touch does not depend on GPIO21 waking the ESP32-S3 from automatic light sleep.
 
 Beginning with **v1.0.29**, physical UART logging is disabled with `logger.baud_rate: 0`; DEBUG logs remain available over the ESPHome native API. RTTTL logging is limited to WARN so Find Remote does not flood the log.
 
@@ -86,20 +86,17 @@ Because deliberate TV-off sleep disables Wi-Fi, Find Remote is unavailable after
 
 ## Automatic TV-off deep sleep
 
-`media_player.basement_tv` is the authority for automatic deep sleep. When it reports exactly `off`, firmware debounces the state, renders [`assets/sleep-screen.svg`](assets/sleep-screen.svg), gives the asynchronous SSD1677 full refresh its existing 10-second completion window, disables Wi-Fi, and enters ESP32 deep sleep. GPIO4, the physical AI / Power button, is the deep-sleep wake source.
+`media_player.basement_tv` is the authority for automatic deep sleep. When it reports exactly `off`, firmware debounces the state, renders [`assets/sleep-screen.svg`](assets/sleep-screen.svg), gives the asynchronous SSD1677 full refresh its existing completion window, disables Wi-Fi, and enters ESP32 deep sleep. GPIO4, the physical AI / Power button, is the deep-sleep wake source.
 
-The sleep-screen regression appeared after **v1.0.35** added automatic ESP32 light sleep. The final TV-off render was still using the older path's assumption that the ESP32 remained fully awake during its e-paper transaction. **v1.0.36 restores that assumption without replacing the validated sleep scripts.**
+v1.0.37 intentionally uses the **v1.0.34 sleep path**, which predates the automatic-light-sleep regression. This means the approved sleep-screen render no longer needs the v1.0.36 light-sleep guard: automatic light sleep is not enabled at all while awake.
 
-A 250 ms power-management guard watches the existing sleep state. When the TV is confirmed `off`, Find Remote is not active, and no TV-wake action is in progress, it configures ESP-IDF for a fixed **160 MHz** CPU frequency with automatic light sleep disabled. Once `sleep_display_active` is set by the inherited renderer, the guard remains active unconditionally until deep sleep resets the ESP32. This also protects against the narrow case where v1.0.35's delayed 20-second light-sleep setup runs during the TV-off debounce.
-
-If the TV returns on or the sleep attempt is otherwise cancelled before the sleep face is rendered, v1.0.36 restores the normal **40–160 MHz** dynamic-frequency/light-sleep configuration. During the first 20 seconds after boot it instead preserves the existing fully-awake startup policy and lets v1.0.35's normal delayed power-management setup take over.
-
-The deliberate deep-sleep path disables Wi-Fi **before** `deep_sleep.enter`. Home Assistant should therefore mark the Sticky's state-bearing ESPHome entities **Unavailable** while deeply asleep and make them available again after wake/reconnect. Automatic TV-on light sleep is different: it keeps Wi-Fi/API connectivity and does not redraw the display or reboot the ESP32.
+The deliberate deep-sleep path disables Wi-Fi **before** `deep_sleep.enter`. Home Assistant should therefore mark the Sticky's state-bearing ESPHome entities **Unavailable** while deeply asleep and make them available again after wake/reconnect.
 
 ## Touch / wake reliability
 
 Production behavior retains these validated fixes:
 
+- automatic ESP32 light sleep is disabled in v1.0.37 so touch no longer depends on GPIO21 wake behavior;
 - short AI-button wake uses the known-good Sticky board-latch sequence;
 - GPIO45/GPIO46/GPIO47 are not manipulated by touch-recovery code;
 - GT911 power is retained through deep sleep on GPIO42;
@@ -113,7 +110,7 @@ Production behavior retains these validated fixes:
 Firmware emits exactly one authoritative line per boot:
 
 ```text
-Basement Remote firmware 1.0.36 ready
+Basement Remote firmware 1.0.37 ready
 ```
 
 Beginning with **v1.0.32**, readiness requires all of the following:
@@ -153,25 +150,23 @@ Beginning with **v1.0.32**, readiness requires all of the following:
 
 The Sticky uses 32 MB flash and 8 MB octal PSRAM.
 
-## v1.0.36 validation checklist
+## v1.0.37 validation checklist
 
-1. Compile v1.0.36 with ESPHome 2026.8.2 and confirm there are no configuration/compiler errors.
-2. Confirm `CONFIG_PM_ENABLE` and `CONFIG_FREERTOS_USE_TICKLESS_IDLE` remain enabled and the normal TV-on CPU range is 40–160 MHz.
-3. Confirm physical UART logging remains disabled while native-API DEBUG logging works.
-4. Confirm `epaper_display` still uses `update_interval: never`.
-5. Confirm Wi-Fi still resolves to `fast_connect: true`, `power_save_mode: HIGH`, and `output_power: 8.5dB`.
-6. Boot with the TV on and confirm startup BUSY evidence completes before `Basement Remote firmware 1.0.36 ready` is logged.
-7. About 20 seconds after boot, confirm `Automatic light sleep enabled; CPU range 40-160 MHz; wake GPIOs 4/5/6/21` appears without a power-management error.
-8. Confirm the remote stays available in Home Assistant while the TV is on and idle.
-9. Confirm touchscreen, side-volume buttons, AI / Power short/long press, app launchers, and D-pad hold-to-repeat remain responsive after idle periods.
-10. Confirm Find Remote still repeats continuously, cancels on local input, and blocks TV-off sleep while active.
-11. Turn the TV off and confirm `TV-off e-paper guard active; automatic light sleep disabled; CPU fixed at 160 MHz` appears before the sleep render begins.
-12. Confirm the normal `Rendering approved sleep face` log appears and the approved sleep artwork is fully visible before the remote disconnects.
-13. Confirm `Sleep face rendered; dropping Wi-Fi before deep sleep` is logged after the existing refresh window and that the device then becomes unavailable in Home Assistant.
-14. Wake with a brief AI / Power tap and confirm the shared Home Assistant TV-on script turns the TV on.
-15. Repeat TV-off / wake cycles several times and confirm the sleep artwork is reliable on every cycle.
-16. Test a cancelled TV-off transition (TV returns on before render) and confirm `TV-off e-paper guard released; automatic light sleep restored; CPU range 40-160 MHz` appears.
-17. Confirm low-battery threshold changes and the **Refresh E-Paper** diagnostic button still perform explicit display refreshes.
+1. Compile v1.0.37 with ESPHome 2026.8.2 and confirm there are no configuration/compiler errors.
+2. Confirm `CONFIG_PM_ENABLE` remains enabled for dynamic frequency scaling, but automatic light sleep is disabled.
+3. About 20 seconds after boot, confirm `Dynamic frequency scaling enabled; CPU range 40-160 MHz; automatic light sleep disabled` appears.
+4. Confirm physical UART logging remains disabled while native-API DEBUG logging works.
+5. Confirm `epaper_display` still uses `update_interval: never`.
+6. Confirm Wi-Fi still resolves to `fast_connect: true`, `power_save_mode: HIGH`, and `output_power: 8.5dB`.
+7. Boot with the TV on and confirm startup BUSY evidence completes before `Basement Remote firmware 1.0.37 ready` is logged.
+8. Confirm touchscreen input is responsive immediately after boot and remains responsive after several minutes of idle time.
+9. Confirm touchscreen D-pad hold-to-repeat works after idle periods.
+10. Confirm Volume Up, Volume Down, AI / Power short/long press, app launchers, and Find Remote remain responsive.
+11. Turn the TV off and confirm the approved sleep artwork is fully rendered before deep sleep.
+12. Confirm state-bearing ESPHome entities become **Unavailable** only after deliberate deep sleep.
+13. Wake with a brief AI / Power tap and confirm the shared Home Assistant TV-on script turns the TV on.
+14. Repeat TV-off / wake cycles several times and confirm touch remains functional after every wake.
+15. Confirm low-battery threshold changes and the **Refresh E-Paper** diagnostic button still perform explicit display refreshes.
 
 # M5PaperMono Lite
 
