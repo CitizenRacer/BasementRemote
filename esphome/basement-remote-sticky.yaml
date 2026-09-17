@@ -1,62 +1,119 @@
 # Basement Remote Sticky firmware
 #
-# v1.0.37 restores touchscreen reliability by backing out automatic ESP32-S3
-# light sleep, which was introduced in v1.0.35 and made GT911 touch wake
-# unreliable. The firmware returns to the validated v1.0.34 behavior as its
-# base, then re-enables dynamic frequency scaling only: 40-160 MHz while awake,
-# with automatic light sleep disabled. TV-off deep sleep and the approved sleep
-# screen therefore use the same known-good path that predates the regression.
+# v1.0.38 keeps the complete v1.0.37 touch/power behavior and adds read-only
+# BQ27220 fuel-gauge diagnostics so an implausible SOC can be traced to the
+# gauge's reported capacity/configuration before any configuration is written.
 
 substitutions:
   device_name: basement-remote-sticky
   friendly_name: Basement Remote Sticky
-  firmware_version: "1.0.37"
+  firmware_version: "1.0.38"
 
 packages:
-  sticky_v1034_base:
+  sticky_v1037_base:
     url: https://github.com/CitizenRacer/BasementRemote
-    ref: 1d42b02d0da8c71eadae9aac80f0584d687bc516
+    ref: 539dc6606ecc744950c763b2e2cd0d618df29abe
     files:
       - esphome/basement-remote-sticky.yaml
     refresh: 0s
 
-# Keep the CPU-frequency power saving from the v1.0.35 experiment, but do not
-# allow automatic light sleep. The GT911 remains continuously serviced while
-# the TV is on, so touchscreen input no longer depends on GPIO21 successfully
-# waking the ESP32-S3 from automatic light sleep.
-esp32:
-  framework:
-    sdkconfig_options:
-      CONFIG_PM_ENABLE: "y"
+# Read-only BQ27220 standard-command diagnostics. The existing battery level,
+# voltage, and current sensors remain unchanged. These extra entities expose the
+# values needed to determine whether the gauge is using the wrong capacity
+# profile or has otherwise learned an implausible full-charge capacity.
+sensor:
+  - platform: template
+    id: battery_remaining_capacity
+    name: "Battery Remaining Capacity"
+    unit_of_measurement: "mAh"
+    state_class: measurement
+    accuracy_decimals: 0
+    entity_category: diagnostic
+    update_interval: 60s
+    lambda: |-
+      uint8_t reg = 0x10;
+      uint8_t raw[2] = {0, 0};
+      auto err = id(sensor_i2c).write_readv(0x55, &reg, 1, raw, 2);
+      if (err != esphome::i2c::ERROR_OK) {
+        return NAN;
+      }
+      const uint16_t value = static_cast<uint16_t>(raw[0]) |
+                             (static_cast<uint16_t>(raw[1]) << 8);
+      return static_cast<float>(value);
 
-esphome:
-  includes:
-    - <esp_pm.h>
-  on_boot:
-    - priority: -200
-      then:
-        # Preserve the known-good startup/readiness path before changing CPU PM.
-        - delay: 20s
-        - lambda: |-
-            esp_pm_config_t pm_config{};
-            pm_config.max_freq_mhz = 160;
-            pm_config.min_freq_mhz = 40;
-            pm_config.light_sleep_enable = false;
+  - platform: template
+    id: battery_full_charge_capacity
+    name: "Battery Full Charge Capacity"
+    unit_of_measurement: "mAh"
+    state_class: measurement
+    accuracy_decimals: 0
+    entity_category: diagnostic
+    update_interval: 60s
+    lambda: |-
+      uint8_t reg = 0x12;
+      uint8_t raw[2] = {0, 0};
+      auto err = id(sensor_i2c).write_readv(0x55, &reg, 1, raw, 2);
+      if (err != esphome::i2c::ERROR_OK) {
+        return NAN;
+      }
+      const uint16_t value = static_cast<uint16_t>(raw[0]) |
+                             (static_cast<uint16_t>(raw[1]) << 8);
+      return static_cast<float>(value);
 
-            const esp_err_t err = esp_pm_configure(&pm_config);
-            if (err != ESP_OK) {
-              ESP_LOGE("power",
-                       "Dynamic frequency scaling could not be enabled: %s",
-                       esp_err_to_name(err));
-              return;
-            }
+  - platform: template
+    id: battery_state_of_health
+    name: "Battery State of Health"
+    unit_of_measurement: "%"
+    state_class: measurement
+    accuracy_decimals: 0
+    entity_category: diagnostic
+    update_interval: 60s
+    lambda: |-
+      uint8_t reg = 0x2E;
+      uint8_t raw[2] = {0, 0};
+      auto err = id(sensor_i2c).write_readv(0x55, &reg, 1, raw, 2);
+      if (err != esphome::i2c::ERROR_OK) {
+        return NAN;
+      }
+      const uint16_t value = static_cast<uint16_t>(raw[0]) |
+                             (static_cast<uint16_t>(raw[1]) << 8);
+      if (value > 100) {
+        return NAN;
+      }
+      return static_cast<float>(value);
 
-            esp_pm_config_t active_config{};
-            if (esp_pm_get_configuration(&active_config) == ESP_OK) {
-              ESP_LOGI("power",
-                       "Dynamic frequency scaling enabled; CPU range %d-%d MHz; automatic light sleep disabled",
-                       active_config.min_freq_mhz, active_config.max_freq_mhz);
-            } else {
-              ESP_LOGI("power",
-                       "Dynamic frequency scaling enabled; CPU range 40-160 MHz; automatic light sleep disabled");
-            }
+  - platform: template
+    id: battery_design_capacity
+    name: "Battery Design Capacity"
+    unit_of_measurement: "mAh"
+    state_class: measurement
+    accuracy_decimals: 0
+    entity_category: diagnostic
+    update_interval: 60s
+    lambda: |-
+      uint8_t reg = 0x3C;
+      uint8_t raw[2] = {0, 0};
+      auto err = id(sensor_i2c).write_readv(0x55, &reg, 1, raw, 2);
+      if (err != esphome::i2c::ERROR_OK) {
+        return NAN;
+      }
+      const uint16_t value = static_cast<uint16_t>(raw[0]) |
+                             (static_cast<uint16_t>(raw[1]) << 8);
+      return static_cast<float>(value);
+
+  - platform: template
+    id: battery_status_raw
+    name: "Battery Status Raw"
+    accuracy_decimals: 0
+    entity_category: diagnostic
+    update_interval: 60s
+    lambda: |-
+      uint8_t reg = 0x0A;
+      uint8_t raw[2] = {0, 0};
+      auto err = id(sensor_i2c).write_readv(0x55, &reg, 1, raw, 2);
+      if (err != esphome::i2c::ERROR_OK) {
+        return NAN;
+      }
+      const uint16_t value = static_cast<uint16_t>(raw[0]) |
+                             (static_cast<uint16_t>(raw[1]) << 8);
+      return static_cast<float>(value);

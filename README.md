@@ -6,7 +6,7 @@ Touchscreen e-paper TV remote firmware backed directly by Home Assistant over ES
 
 | Hardware | Firmware | Status |
 | --- | --- | --- |
-| Seeed Studio reTerminal Sticky | **v1.0.37** | Production target |
+| Seeed Studio reTerminal Sticky | **v1.0.38** | Production target |
 | M5Stack M5PaperMono Lite (C153-LITE) | **v0.1.0** | Initial bring-up / compile validated; hardware not yet available |
 
 The production Sticky source is [`esphome/basement-remote-sticky.yaml`](esphome/basement-remote-sticky.yaml). The PaperMono target remains separate.
@@ -88,7 +88,7 @@ Because deliberate TV-off sleep disables Wi-Fi, Find Remote is unavailable after
 
 `media_player.basement_tv` is the authority for automatic deep sleep. When it reports exactly `off`, firmware debounces the state, renders [`assets/sleep-screen.svg`](assets/sleep-screen.svg), gives the asynchronous SSD1677 full refresh its existing completion window, disables Wi-Fi, and enters ESP32 deep sleep. GPIO4, the physical AI / Power button, is the deep-sleep wake source.
 
-v1.0.37 intentionally uses the **v1.0.34 sleep path**, which predates the automatic-light-sleep regression. This means the approved sleep-screen render no longer needs the v1.0.36 light-sleep guard: automatic light sleep is not enabled at all while awake.
+v1.0.37 and later intentionally use the **v1.0.34 sleep path**, which predates the automatic-light-sleep regression. Automatic light sleep is not enabled at all while awake.
 
 The deliberate deep-sleep path disables Wi-Fi **before** `deep_sleep.enter`. Home Assistant should therefore mark the Sticky's state-bearing ESPHome entities **Unavailable** while deeply asleep and make them available again after wake/reconnect.
 
@@ -96,7 +96,7 @@ The deliberate deep-sleep path disables Wi-Fi **before** `deep_sleep.enter`. Hom
 
 Production behavior retains these validated fixes:
 
-- automatic ESP32 light sleep is disabled in v1.0.37 so touch no longer depends on GPIO21 wake behavior;
+- automatic ESP32 light sleep is disabled so touch no longer depends on GPIO21 wake behavior;
 - short AI-button wake uses the known-good Sticky board-latch sequence;
 - GPIO45/GPIO46/GPIO47 are not manipulated by touch-recovery code;
 - GT911 power is retained through deep sleep on GPIO42;
@@ -105,12 +105,26 @@ Production behavior retains these validated fixes:
 - both awake short-press TV-on and deep-sleep wake use `script.tv_turn_on_the_tv_cable`;
 - the `%u` / `long unsigned int` compile warning is fixed with `%lu` and an explicit `unsigned long` cast.
 
+## Battery telemetry and BQ27220 diagnostics
+
+The Sticky's BQ27220 fuel gauge is on the dedicated sensor I²C bus at address `0x55`. Existing production telemetry reads battery state of charge, voltage, and instantaneous current once per minute.
+
+Beginning with **v1.0.38**, the firmware also exposes these **read-only diagnostic** Home Assistant entities once per minute:
+
+- **Battery Remaining Capacity** — BQ27220 `RemainingCapacity()` at `0x10/0x11`, in mAh;
+- **Battery Full Charge Capacity** — `FullChargeCapacity()` at `0x12/0x13`, in mAh;
+- **Battery State of Health** — `StateOfHealth()` at `0x2E/0x2F`, in percent;
+- **Battery Design Capacity** — `DesignCapacity()` at `0x3C/0x3D`, in mAh; and
+- **Battery Status Raw** — `BatteryStatus()` at `0x0A/0x0B` as the raw 16-bit status word.
+
+v1.0.38 deliberately performs **no BQ27220 configuration writes**. These values are intended to diagnose cases where the charger indicates full but the gauge reports an implausibly low SOC. In particular, compare Remaining Capacity, Full Charge Capacity, and Design Capacity before changing any battery profile or learned gauge state.
+
 ## Authoritative readiness log
 
 Firmware emits exactly one authoritative line per boot:
 
 ```text
-Basement Remote firmware 1.0.37 ready
+Basement Remote firmware 1.0.38 ready
 ```
 
 Beginning with **v1.0.32**, readiness requires all of the following:
@@ -150,23 +164,18 @@ Beginning with **v1.0.32**, readiness requires all of the following:
 
 The Sticky uses 32 MB flash and 8 MB octal PSRAM.
 
-## v1.0.37 validation checklist
+## v1.0.38 validation checklist
 
-1. Compile v1.0.37 with ESPHome 2026.8.2 and confirm there are no configuration/compiler errors.
-2. Confirm `CONFIG_PM_ENABLE` remains enabled for dynamic frequency scaling, but automatic light sleep is disabled.
-3. About 20 seconds after boot, confirm `Dynamic frequency scaling enabled; CPU range 40-160 MHz; automatic light sleep disabled` appears.
-4. Confirm physical UART logging remains disabled while native-API DEBUG logging works.
-5. Confirm `epaper_display` still uses `update_interval: never`.
-6. Confirm Wi-Fi still resolves to `fast_connect: true`, `power_save_mode: HIGH`, and `output_power: 8.5dB`.
-7. Boot with the TV on and confirm startup BUSY evidence completes before `Basement Remote firmware 1.0.37 ready` is logged.
-8. Confirm touchscreen input is responsive immediately after boot and remains responsive after several minutes of idle time.
-9. Confirm touchscreen D-pad hold-to-repeat works after idle periods.
-10. Confirm Volume Up, Volume Down, AI / Power short/long press, app launchers, and Find Remote remain responsive.
-11. Turn the TV off and confirm the approved sleep artwork is fully rendered before deep sleep.
-12. Confirm state-bearing ESPHome entities become **Unavailable** only after deliberate deep sleep.
-13. Wake with a brief AI / Power tap and confirm the shared Home Assistant TV-on script turns the TV on.
-14. Repeat TV-off / wake cycles several times and confirm touch remains functional after every wake.
-15. Confirm low-battery threshold changes and the **Refresh E-Paper** diagnostic button still perform explicit display refreshes.
+1. Confirm the touchscreen remains responsive immediately after boot and after idle periods.
+2. Confirm `Dynamic frequency scaling enabled; CPU range 40-160 MHz; automatic light sleep disabled` appears after startup.
+3. Confirm the existing Battery Level, Battery Voltage, Battery Current, and Battery Charging entities remain available.
+4. Confirm Battery Remaining Capacity reports a plausible mAh value.
+5. Confirm Battery Full Charge Capacity reports a plausible mAh value.
+6. Confirm Battery Design Capacity and compare it with the installed battery's expected capacity before making any gauge configuration change.
+7. Confirm Battery State of Health is between 0 and 100%.
+8. Record Battery Status Raw while plugged in with a green charge LED and again while unplugged.
+9. Confirm the approved sleep artwork still renders before TV-off deep sleep.
+10. Confirm wake, buttons, app launchers, Find Remote, and e-paper refresh behavior remain unchanged.
 
 # M5PaperMono Lite
 
