@@ -1,0 +1,26 @@
+# Basement Remote Sticky firmware
+#
+# v1.0.30 keeps the complete v1.0.29 behavior and removes the automatic
+# 10-minute e-paper refresh. The static remote face now refreshes only when
+# explicitly required: startup, low-battery threshold changes, manual refresh,
+# or the final sleep-screen render before deep sleep.
+
+substitutions:
+  device_name: basement-remote-sticky
+  friendly_name: Basement Remote Sticky
+  firmware_version: "1.0.30"
+
+packages:
+  sticky_v1029_base:
+    url: https://github.com/CitizenRacer/BasementRemote
+    ref: main
+    files:
+      - esphome/ota-encrypted-history/base-05.yaml
+    refresh: 0s
+
+# The normal remote face is static, so periodic full e-paper refreshes waste
+# energy without changing what the user sees. Explicit component.update calls
+# still handle startup, low-battery state changes, manual refresh, and sleep.
+display:
+  - id: !extend epaper_display
+    update_interval: never
