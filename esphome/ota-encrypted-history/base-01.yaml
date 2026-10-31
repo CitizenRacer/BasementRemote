@@ -14,7 +14,7 @@ packages:
     ref: main
     files:
       - esphome/ota-encrypted-history/base-00.yaml
-    refresh: 0s
+    refresh: 60s
 
   # Remove the inherited v1.0.14 on_boot automation so its early "ready" log
   # cannot fire before Wi-Fi/API/Home Assistant are actually usable. The local
