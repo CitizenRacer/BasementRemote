@@ -1,0 +1,22 @@
+# Basement Remote Sticky firmware
+#
+# v1.0.39 is a one-time ESPHome 2026.9.0 OTA-encryption migration bridge.
+# It keeps the complete v1.0.38 behavior, including the BQ27220 diagnostics,
+# while deliberately retaining the existing OTA password for this one install.
+# ESPHome 2026.9.0 will then offer encrypted OTA using the existing native API
+# encryption key, allowing the following release to require OTA encryption and
+# remove the separate OTA password without locking out an already-installed
+# device that was previously running ESPHome 2026.8.2.
+
+substitutions:
+  device_name: basement-remote-sticky
+  friendly_name: Basement Remote Sticky
+  firmware_version: "1.0.39"
+
+packages:
+  sticky_v1038_base:
+    url: https://github.com/CitizenRacer/BasementRemote
+    ref: main
+    files:
+      - esphome/ota-encrypted-history/base-11.yaml
+    refresh: 0s
