@@ -19,12 +19,13 @@ packages:
     files:
       - esphome/basement-remote-sticky.yaml
     refresh: 0s
-# Require Noise-encrypted OTA using the existing native API key.
-# The already-running ESPHome 2026.10.1 firmware supports this migration.
+# One-install OTA migration: the inherited password authenticates the old
+# firmware; this firmware requires encryption after the upload.
+# Remove allow_plaintext_upload and the inherited password after deployment.
 ota:
   - platform: esphome
-    password: !remove
     encryption:
+      allow_plaintext_upload: true
 
 # Sticky charger enable is GPIO39, active low. Keep this internal so Home
 # Assistant cannot accidentally disable charging. ALWAYS_ON means logical ON,
