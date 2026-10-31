@@ -15,7 +15,7 @@ packages:
     ref: main
     files:
       - esphome/ota-encrypted-history/base-04.yaml
-    refresh: 0s
+    refresh: 60s
 
 # Keep production DEBUG logs available over the ESPHome native API, but stop
 # continuously driving the physical serial console. Component-level overrides
