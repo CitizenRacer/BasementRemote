@@ -18,7 +18,7 @@ packages:
     ref: main
     files:
       - esphome/ota-encrypted-history/base-09.yaml
-    refresh: 0s
+    refresh: 60s
 
 # Keep the CPU-frequency power saving from the v1.0.35 experiment, but do not
 # allow automatic light sleep. The GT911 remains continuously serviced while
