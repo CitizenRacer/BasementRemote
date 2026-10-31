@@ -17,7 +17,7 @@ packages:
     ref: main
     files:
       - esphome/ota-encrypted-history/base-06.yaml
-    refresh: 0s
+    refresh: 60s
 
   # The v1.0.30 package chain installs an API callback that invokes the older
   # report_ready_after_init script. Remove only that callback; leaving the old
