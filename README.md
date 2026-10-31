@@ -6,7 +6,7 @@ Touchscreen e-paper TV remote firmware backed directly by Home Assistant over ES
 
 | Hardware | Firmware | Status |
 | --- | --- | --- |
-| Seeed Studio reTerminal Sticky | **v1.0.40** | Production target / charger fix / OTA-encryption migration bridge |
+| Seeed Studio reTerminal Sticky | **v1.0.40** | Production target / charger fix / mandatory encrypted OTA |
 | M5Stack M5PaperMono Lite (C153-LITE) | **v0.1.0** | Initial bring-up / compile validated; hardware not yet available |
 
 The production Sticky source is [`esphome/basement-remote-sticky.yaml`](esphome/basement-remote-sticky.yaml). `CitizenRacer/BasementRemote` is the canonical source of truth.
@@ -86,13 +86,9 @@ Beginning with **v1.0.40**:
 
 After installing v1.0.40 while USB remains connected, the expected immediate behavior is that Battery Current becomes positive and Battery Voltage begins rising. The charging LED should indicate active charging until the cell actually reaches charge termination. Only after normal charging behavior is confirmed should the BQ27220's SOC/capacity configuration be reconsidered.
 
-## OTA encryption migration
+## Encrypted OTA (mandatory)
 
-ESPHome 2026.9.0 adds encrypted OTA using the same Noise key as the native API. The Sticky previously ran firmware built with ESPHome 2026.8.2, which cannot offer the new encrypted OTA protocol. Requiring encryption immediately would risk locking out OTA updates.
-
-v1.0.39 introduced the migration bridge. **v1.0.40 deliberately keeps that bridge behavior** so the charger fix remains installable whether the device is currently on v1.0.38 or v1.0.39. The existing OTA password therefore remains for this release while ESPHome 2026.9.0 can offer encrypted OTA using `basement_remote_api_encryption_key`.
-
-After v1.0.40 is confirmed running, a later release can safely remove the OTA password and require:
+The reTerminal Sticky completed the one-time password-to-encryption migration. Current firmware uses the existing native API Noise key to authenticate and encrypt OTA. The legacy OTA password and `allow_plaintext_upload` must not be present in production:
 
 ```yaml
 ota:
@@ -100,7 +96,9 @@ ota:
     encryption:
 ```
 
-The password-related flash/RAM warning is therefore still expected for this transition release.
+The production source imports `esphome/ota-encrypted-history/base-12.yaml`, which inherits the earlier feature layers through `base-00.yaml`. These files reconstruct the original firmware behavior without the original password-based OTA block. All Git package references use `refresh: 60s` to avoid permanently stale `main` imports. The Device Builder wrapper should not add its own OTA block or `ota_password` substitution.
+
+ESPHome Device Builder validation and an actual OTA upload are the final end-to-end checks; repository inspection alone does not prove the merged on-device configuration.
 
 ## Sticky hardware mapping
 
@@ -141,7 +139,7 @@ The Sticky uses 32 MB flash and 8 MB octal PSRAM.
 8. After the TV is turned off and the remote enters deep sleep, leave USB connected and confirm charging continues across the sleep interval.
 9. Wake with AI / Power and confirm charging telemetry resumes normally.
 10. Confirm Volume Up, Volume Down, AI / Power short/long press, app launchers, Find Remote, sleep-screen rendering, and deep-sleep wake remain unchanged.
-11. Keep the existing OTA password for this release; encrypted-only OTA migration is deferred until v1.0.40 is confirmed installed.
+11. Require encrypted OTA; do not restore the legacy OTA password or plaintext migration fallback.
 
 # M5PaperMono Lite
 
