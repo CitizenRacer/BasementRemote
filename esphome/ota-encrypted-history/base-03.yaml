@@ -15,7 +15,7 @@ packages:
     ref: main
     files:
       - esphome/ota-encrypted-history/base-02.yaml
-    refresh: 0s
+    refresh: 60s
 
 # 160 MHz reduces awake CPU power while retaining plenty of headroom for the
 # e-paper UI, GT911 touch handling, and ESPHome/Home Assistant API traffic.
