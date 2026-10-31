@@ -19,4 +19,4 @@ packages:
     ref: main
     files:
       - esphome/ota-encrypted-history/base-11.yaml
-    refresh: 0s
+    refresh: 60s
