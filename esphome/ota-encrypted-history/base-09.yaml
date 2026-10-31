@@ -16,7 +16,7 @@ packages:
     ref: main
     files:
       - esphome/ota-encrypted-history/base-08.yaml
-    refresh: 0s
+    refresh: 60s
 
 wifi:
   fast_connect: true
