@@ -1,0 +1,24 @@
+# Basement Remote Sticky firmware
+#
+# v1.0.29 keeps the complete v1.0.28 behavior and disables physical UART
+# logging to reduce unnecessary awake power use. DEBUG logging remains available
+# to API log clients such as ESPHome Device Builder.
+
+substitutions:
+  device_name: basement-remote-sticky
+  friendly_name: Basement Remote Sticky
+  firmware_version: "1.0.29"
+
+packages:
+  sticky_v1028_base:
+    url: https://github.com/CitizenRacer/BasementRemote
+    ref: main
+    files:
+      - esphome/ota-encrypted-history/base-04.yaml
+    refresh: 0s
+
+# Keep production DEBUG logs available over the ESPHome native API, but stop
+# continuously driving the physical serial console. Component-level overrides
+# inherited from v1.0.28 (including RTTTL=WARN) remain in effect.
+logger:
+  baud_rate: 0
