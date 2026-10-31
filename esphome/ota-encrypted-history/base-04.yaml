@@ -16,7 +16,7 @@ packages:
     ref: main
     files:
       - esphome/ota-encrypted-history/base-03.yaml
-    refresh: 0s
+    refresh: 60s
 
 # Replace the inherited readiness script. The previous test only checked that
 # touch/display had not failed; at 160 MHz the initial asynchronous e-paper
