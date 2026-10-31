@@ -19,11 +19,9 @@ packages:
     files:
       - esphome/basement-remote-sticky.yaml
     refresh: 0s
-# The device now supports encrypted OTA. Never allow plaintext fallback.
-ota:
-  - platform: esphome
-    password: !remove
-    encryption:
+# Drop the legacy password OTA component inherited from the pinned base.
+# The local Device Builder wrapper defines a clean encrypted OTA component.
+ota: !remove
 
 # Sticky charger enable is GPIO39, active low. Keep this internal so Home
 # Assistant cannot accidentally disable charging. ALWAYS_ON means logical ON,
