@@ -15,7 +15,7 @@ packages:
     ref: main
     files:
       - esphome/ota-encrypted-history/base-10.yaml
-    refresh: 0s
+    refresh: 60s
 
 # Read-only BQ27220 standard-command diagnostics. The existing battery level,
 # voltage, and current sensors remain unchanged. These extra entities expose the
