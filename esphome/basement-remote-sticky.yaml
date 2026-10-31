@@ -18,7 +18,7 @@ packages:
     ref: main
     files:
       - esphome/ota-encrypted-history/base-12.yaml
-    refresh: 0s
+    refresh: 60s
 # The inherited base now defines encrypted OTA without a password.
 
 # Sticky charger enable is GPIO39, active low. Keep this internal so Home
