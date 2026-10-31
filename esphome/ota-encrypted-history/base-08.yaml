@@ -1,0 +1,21 @@
+# Basement Remote Sticky firmware
+#
+# v1.0.33 keeps the complete v1.0.32 behavior and enables ESPHome fast Wi-Fi
+# association. The remote is intended to be pinned to the nearby access point,
+# so skipping the normal multi-AP scan reduces wake-to-network time and energy.
+
+substitutions:
+  device_name: basement-remote-sticky
+  friendly_name: Basement Remote Sticky
+  firmware_version: "1.0.33"
+
+packages:
+  sticky_v1032_base:
+    url: https://github.com/CitizenRacer/BasementRemote
+    ref: main
+    files:
+      - esphome/ota-encrypted-history/base-07.yaml
+    refresh: 0s
+
+wifi:
+  fast_connect: true
