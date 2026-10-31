@@ -1,0 +1,31 @@
+# Basement Remote Sticky firmware
+#
+# v1.0.27 keeps the complete v1.0.26 behavior and reduces awake CPU frequency
+# from the ESP32-S3 default 240 MHz to 160 MHz for lower TV-on power use while
+# preserving normal touchscreen, Home Assistant API, and Wi-Fi responsiveness.
+
+substitutions:
+  device_name: basement-remote-sticky
+  friendly_name: Basement Remote Sticky
+  firmware_version: "1.0.27"
+
+packages:
+  sticky_v1026_base:
+    url: https://github.com/CitizenRacer/BasementRemote
+    ref: main
+    files:
+      - esphome/ota-encrypted-history/base-02.yaml
+    refresh: 0s
+
+# 160 MHz reduces awake CPU power while retaining plenty of headroom for the
+# e-paper UI, GT911 touch handling, and ESPHome/Home Assistant API traffic.
+esp32:
+  cpu_frequency: 160MHz
+
+# The locator watchdog intentionally restarts a short RTTTL phrase whenever it
+# finishes. RTTTL logs every start/finish at DEBUG, which is useful during bring-
+# up but noisy during normal Find Remote use. Preserve warnings/errors while
+# suppressing only that component's repetitive debug chatter.
+logger:
+  logs:
+    rtttl: WARN
