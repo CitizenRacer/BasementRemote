@@ -15,7 +15,7 @@ packages:
     ref: main
     files:
       - esphome/ota-encrypted-history/base-01.yaml
-    refresh: 0s
+    refresh: 60s
 
 # The locator watchdog intentionally restarts a short RTTTL phrase whenever it
 # finishes. RTTTL logs every start/finish at DEBUG, which is useful during bring-
